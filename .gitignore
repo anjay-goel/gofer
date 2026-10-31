@@ -1,0 +1,4 @@
+/bin/
+/dist/
+/internal/payload/bin/*
+!/internal/payload/bin/.keep
