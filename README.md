@@ -17,7 +17,7 @@ They keep working while your laptop sleeps. Follow them on your phone, and attac
 - **No server:** each command runs `gofer rpc` over SSH, then exits.
 - **Your laptop can sleep:** results wait on the dev box until you ask.
 - **Real Claude:** agents are `claude --bg` sessions, never `claude -p` or the Agent SDK.
-- **Small footprint:** hooks are per session. Gofer only marks repos under your root as trusted, and records your bypass acceptance if you use `--bypass`.
+- **Small footprint:** hooks are per session. Gofer only records Claude's first-run acceptances: repo trust, `--bypass` and Remote Control.
 
 ## Quick start
 
@@ -38,6 +38,8 @@ gofer wait auth
 ```
 
 Or ask your local Claude: `gofer init` installs a skill, so "hand this off to gofer" just works.
+
+Run `/gofer-setup` in Claude Code to set up the box. It asks what you need, then handles repos, dev tools, CLIs, MCP servers and Claude settings one at a time.
 
 ### Hand off your current work
 
@@ -123,7 +125,7 @@ gofer init odin --root ~/code
 | --- | --- |
 | `--root <dir>` | Folder that holds your repos |
 | `--terminal ssh\|rex` | How `gofer attach` opens |
-| `--rc` | Install a `claude-rc` service to start sessions from your phone |
+| `--rc` | Install the persistent Remote Control service without asking |
 | `--yes` | Skip the install prompt |
 
 `gofer init --remove [host]` undoes what gofer installed. Agent state stays on the dev box.

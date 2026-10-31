@@ -655,6 +655,11 @@ func TestRCInstall(t *testing.T) {
 	if _, err := f.srv.rcInstall(core.RCParams{Name: "dev box", Dir: f.home}); err == nil {
 		t.Fatal("a name with a space was accepted")
 	}
+	if _, err := f.srv.rcInstall(core.RCParams{Name: "box", Dir: f.home}); err == nil {
+		t.Fatal("the home folder was accepted")
+	}
+	dir := filepath.Join(f.home, "code")
+	must(t, os.MkdirAll(dir, 0o755))
 	steps := []struct {
 		name string
 		want string
@@ -665,8 +670,11 @@ func TestRCInstall(t *testing.T) {
 	}
 	for _, step := range steps {
 		f.write(t, "calls.log", "")
-		_, err := f.srv.rcInstall(core.RCParams{Name: step.name, Dir: f.home})
+		_, err := f.srv.rcInstall(core.RCParams{Name: step.name, Dir: dir})
 		must(t, err)
+		if !f.srv.trusted(dir) {
+			t.Fatal("the service folder isn't trusted")
+		}
 		if !strings.Contains(f.calls(t), step.want) {
 			t.Fatalf("%s: calls = %q", step.want, f.calls(t))
 		}

@@ -147,6 +147,17 @@ func (d *Driver) Trust(dir string) error {
 	})
 }
 
+func (d *Driver) AcceptRemoteControl() (changed bool, err error) {
+	err = updateDocument(d.globalConfig(), func(doc document) error {
+		if string(doc["remoteDialogSeen"]) == "true" {
+			return nil
+		}
+		changed = true
+		return setField(doc, "remoteDialogSeen", true)
+	})
+	return changed, err
+}
+
 func (d *Driver) BypassAccepted() bool {
 	var settings struct {
 		Skip bool `json:"skipDangerousModePermissionPrompt"`

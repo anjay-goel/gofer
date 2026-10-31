@@ -213,7 +213,7 @@ echo 'GOFER-RPC {"result":{"name":"job"}}'
 
 func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	path, err := skillPath()
+	path, err := skillPath("gofer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,9 +226,15 @@ func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 	if err := syncSkill(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(path)
-	if err != nil || string(data) != skill.Text {
-		t.Fatalf("skill = %q, err = %v", data, err)
+	for _, s := range skill.All {
+		path, err := skillPath(s.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != s.Text {
+			t.Fatalf("%s = %q, err = %v", s.Name, data, err)
+		}
 	}
 }
 
@@ -252,5 +258,24 @@ func TestAgentTable(t *testing.T) {
 		if got := utf8.RuneCountInString(line[:strings.LastIndex(line, " ")+1]); got != column {
 			t.Fatalf("source column at %d, want %d: %q", got, column, line)
 		}
+	}
+}
+
+func TestParseKey(t *testing.T) {
+	cases := map[string]string{
+		"\x1b[A": "up",
+		"\x1bOB": "down",
+		"j":      "down",
+		"\r":     "enter",
+		"\x03":   "cancel",
+		"Y":      "y",
+	}
+	for input, want := range cases {
+		if got := parseKey([]byte(input)); got != want {
+			t.Errorf("%q: got %q", input, got)
+		}
+	}
+	if step(0, 3, -1) != 2 || step(2, 3, 1) != 0 {
+		t.Fatal("the list doesn't wrap")
 	}
 }

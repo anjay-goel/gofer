@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -99,6 +100,19 @@ func (s *Server) rcInstall(p core.RCParams) (core.NoteResult, error) {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return result, fmt.Errorf("%s doesn't exist on the dev box", dir)
 	}
+	if dir == s.Home {
+		return result, errors.New("claude never saves trust for the home folder, so Remote Control would wait at its prompt. Use --rc-dir with a folder inside it")
+	}
+	wasTrusted := s.trusted(dir)
+	if !wasTrusted {
+		if err := s.trust(dir); err != nil {
+			return result, err
+		}
+	}
+	accepted, err := s.Driver.AcceptRemoteControl()
+	if err != nil {
+		return result, err
+	}
 	if err := os.MkdirAll(filepath.Dir(s.unitPath()), 0o755); err != nil {
 		return result, err
 	}
@@ -114,7 +128,7 @@ func (s *Server) rcInstall(p core.RCParams) (core.NoteResult, error) {
 		return result, fmt.Errorf("couldn't enable claude-rc: %w", err)
 	}
 	start := "start"
-	if string(installed) != unit {
+	if string(installed) != unit || !wasTrusted || accepted {
 		start = "restart"
 	}
 	if _, err := systemctl(start, "claude-rc.service"); err != nil {
@@ -195,11 +209,11 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		state, _ := systemctl("is-active", "claude-rc.service")
 		switch {
 		case state == "active":
-			add("remote control service", true, "claude-rc is active")
+			add(core.CheckRemoteControl, true, "claude-rc is active")
 		case s.ownsUnit():
-			add("remote control service", false, "claude-rc is "+state+", and gofer installed it. Check journalctl --user -u claude-rc")
+			add(core.CheckRemoteControl, false, "claude-rc is "+state+", and gofer installed it. Check journalctl --user -u claude-rc")
 		default:
-			note("remote control service", "claude-rc is "+state+". It's only needed to start sessions from the phone, and gofer init --rc installs it")
+			note(core.CheckRemoteControl, "off. Run gofer init --rc to keep it running")
 		}
 	}
 	return checks, nil

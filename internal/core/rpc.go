@@ -133,6 +133,8 @@ type ResolveResult struct {
 	Note string `json:"note,omitempty"`
 }
 
+const CheckRemoteControl = "remote control service"
+
 type Check struct {
 	Name     string `json:"name"`
 	OK       bool   `json:"ok"`

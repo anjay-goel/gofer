@@ -69,7 +69,7 @@ func Main(version string, args []string) int {
 	a := &app{version: version}
 	args, a.hostFlag = extractHost(args)
 	if len(args) == 0 {
-		fmt.Print(usage)
+		fmt.Print(styledUsage())
 		return 0
 	}
 	name, rest := args[0], args[1:]
@@ -84,7 +84,7 @@ func Main(version string, args []string) int {
 		fmt.Println("gofer", version)
 		return 0
 	case "help", "--help", "-h":
-		fmt.Print(usage)
+		fmt.Print(styledUsage())
 		return 0
 	case "init":
 		err = a.init(rest)

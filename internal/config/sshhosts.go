@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -120,10 +121,14 @@ func TailscalePeers() []string {
 	return peers
 }
 
+var gitHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.org", "ssh.dev.azure.com"}
+
 func Candidates() []Candidate {
 	var out []Candidate
 	for _, h := range SSHHosts() {
-		out = append(out, Candidate{Host: h, Source: "ssh config"})
+		if !slices.Contains(gitHosts, strings.ToLower(h)) {
+			out = append(out, Candidate{Host: h, Source: "ssh config"})
+		}
 	}
 	for _, h := range TailscalePeers() {
 		out = append(out, Candidate{Host: h, Source: "tailscale"})

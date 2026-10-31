@@ -91,7 +91,9 @@ func (a *app) run(args []string) error {
 			return err
 		}
 	}
+	stop := spinning("Starting agent on " + a.host)
 	view, err := a.start(params)
+	stop()
 	if err != nil {
 		return err
 	}
@@ -160,7 +162,9 @@ func (a *app) ls(args []string) error {
 	if _, err := parseInterspersed(fs, args); err != nil {
 		return err
 	}
+	stop := spinning("Reading " + a.host)
 	views, err := transport.Call(a.client, core.List, core.ListParams{Client: a.cfg.Client, Peek: *peek})
+	stop()
 	if err != nil {
 		return err
 	}
@@ -206,7 +210,9 @@ func (a *app) logs(args []string) error {
 	if len(pos) != 1 {
 		return errors.New("usage: gofer logs <name>")
 	}
+	stop := spinning("Reading " + pos[0])
 	lines, err := transport.Call(a.client, core.Logs, core.LogsParams{Name: pos[0], Limit: *limit})
+	stop()
 	if err != nil {
 		return err
 	}
@@ -292,7 +298,16 @@ func (a *app) wait(args []string) error {
 	}
 	backoff := backoffMin
 	trouble := ""
+	label := "Waiting for " + strings.Join(names, ", ")
+	stop := func() {}
+	if !*asJSON {
+		stop = spinning(label)
+	}
+	defer func() { stop() }()
 	report := func(now string) {
+		if now != trouble {
+			stop()
+		}
 		switch {
 		case now == trouble:
 		case now == "":
@@ -319,6 +334,9 @@ func (a *app) wait(args []string) error {
 			}
 			report(network.Error())
 			time.Sleep(min(backoff, slice))
+			if !*asJSON {
+				stop = spinning(label)
+			}
 			backoff = min(backoff*2, backoffMax)
 			continue
 		}
@@ -353,7 +371,9 @@ func (a *app) send(args []string) error {
 	if err != nil {
 		return err
 	}
+	stop := spinning("Sending to " + name)
 	r, err := transport.Call(a.client, core.Send, core.SendParams{Name: name, Message: message})
+	stop()
 	if err != nil {
 		var network transport.NetworkError
 		if errors.As(err, &network) {
@@ -478,7 +498,9 @@ func (a *app) stop(args []string) error {
 	if len(pos) != 1 {
 		return errors.New("usage: gofer stop <name>")
 	}
+	stop := spinning("Stopping " + pos[0])
 	r, err := transport.Call(a.client, core.Stop, core.NameParams{Name: pos[0]})
+	stop()
 	if err != nil {
 		return err
 	}
@@ -503,7 +525,9 @@ func (a *app) rm(args []string) error {
 	name := pos[0]
 	params := core.RemoveParams{Name: name, Force: *force}
 	for {
+		stop := spinning("Removing " + name)
 		r, err := transport.Call(a.client, core.Remove, params)
+		stop()
 		if err != nil {
 			return err
 		}

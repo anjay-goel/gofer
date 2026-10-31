@@ -20,11 +20,14 @@ func (a *app) doctor(args []string) error {
 	if _, err := parseInterspersed(fs, args); err != nil {
 		return err
 	}
-	fmt.Println("Dev box:", a.host)
+	fmt.Printf("%s %s\n", paint(dim, "Dev box:"), paint(bold, a.host))
+	stop := spinning("Checking " + a.host)
+	defer stop()
 	if err := a.client.Reachable(); err != nil {
 		return err
 	}
 	checks, err := transport.Call(a.client, core.Doctor, core.DoctorParams{Root: a.hostCfg.Root})
+	stop()
 	if err != nil {
 		return err
 	}

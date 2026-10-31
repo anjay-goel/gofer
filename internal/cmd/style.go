@@ -69,6 +69,21 @@ func paint(code, text string) string {
 
 func (c cell) String() string { return paint(c.code, c.text) }
 
+func styledUsage() string {
+	lines := strings.Split(usage, "\n")
+	for i, line := range lines {
+		switch {
+		case strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " "):
+			lines[i] = paint(bold, line)
+		case strings.HasPrefix(line, "  gofer "):
+			fields := strings.SplitN(line, " ", 5)
+			command := strings.Join(fields[:4], " ")
+			lines[i] = paint(cyan, command) + strings.TrimPrefix(line, command)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func errorPrefix() string {
 	if errStyled {
 		return ansi(red, "gofer:")

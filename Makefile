@@ -13,7 +13,8 @@ build: payload
 
 install: build
 	mkdir -p $(HOME)/.local/bin
-	cp bin/gofer $(HOME)/.local/bin/gofer
+	cp bin/gofer $(HOME)/.local/bin/gofer.new
+	mv -f $(HOME)/.local/bin/gofer.new $(HOME)/.local/bin/gofer
 
 payload:
 	rm -f internal/payload/bin/*.gz

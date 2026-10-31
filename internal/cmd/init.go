@@ -9,7 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 
 	"github.com/anjay-goel/gofer/internal/config"
@@ -31,10 +31,11 @@ func readLine() string {
 	return strings.TrimSpace(line)
 }
 
-func confirm(question string) bool {
-	fmt.Printf("%s [y/N] ", question)
-	answer := strings.ToLower(readLine())
-	return answer == "y" || answer == "yes"
+func askRoot(cfg *config.Config, host string) string {
+	if !isTTY() || cfg.Hosts[host].Root != "" {
+		return ""
+	}
+	return askText("Repos folder on "+host, "~")
 }
 
 func pickHost() (string, error) {
@@ -42,22 +43,19 @@ func pickHost() (string, error) {
 		return "", errors.New("no host given and no terminal for the picker. Run gofer init <host>")
 	}
 	candidates := config.Candidates()
-	fmt.Println("Which dev box should gofer use?")
-	for i, c := range candidates {
-		fmt.Printf("  %d. %s (%s)\n", i+1, c.Host, c.Source)
+	options := make([]choice, 0, len(candidates)+1)
+	for _, c := range candidates {
+		options = append(options, choice{c.Host, c.Source})
 	}
-	manual := len(candidates) + 1
-	fmt.Printf("  %d. Enter a host yourself\n", manual)
-	fmt.Print("Choice: ")
-	n, err := strconv.Atoi(readLine())
-	if err != nil || n < 1 || n > manual {
-		return "", errors.New("that isn't one of the choices")
+	options = append(options, choice{label: "Enter a host yourself"})
+	picked, err := choose("Which dev box should gofer use?", options)
+	if err != nil {
+		return "", err
 	}
-	if n < manual {
-		return candidates[n-1].Host, nil
+	if picked < len(candidates) {
+		return candidates[picked].Host, nil
 	}
-	fmt.Print("Host: ")
-	host := readLine()
+	host := askText("Host", "")
 	if host == "" {
 		return "", errors.New("no host entered")
 	}
@@ -78,26 +76,31 @@ func tildePath(path string) string {
 	return path
 }
 
-func skillPath() (string, error) {
+func skillPath(name string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude", "skills", "gofer", "SKILL.md"), nil
+	return filepath.Join(home, ".claude", "skills", name, "SKILL.md"), nil
 }
 
 func syncSkill() error {
-	path, err := skillPath()
-	if err != nil {
-		return err
+	for _, s := range skill.All {
+		path, err := skillPath(s.Name)
+		if err != nil {
+			return err
+		}
+		if data, err := os.ReadFile(path); err == nil && string(data) == s.Text {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, []byte(s.Text), 0o644); err != nil {
+			return err
+		}
 	}
-	if data, err := os.ReadFile(path); err == nil && string(data) == skill.Text {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(skill.Text), 0o644)
+	return nil
 }
 
 func (a *app) init(args []string) error {
@@ -130,6 +133,9 @@ func (a *app) init(args []string) error {
 	if *remove {
 		return a.uninstall(cfg, cmp.Or(host, cfg.DefaultHost))
 	}
+	if styled {
+		fmt.Printf("%s %s\n\n", paint(bold, "gofer"), paint(dim, "setup"))
+	}
 	if host == "" {
 		if host, err = pickHost(); err != nil {
 			return err
@@ -143,14 +149,14 @@ func (a *app) init(args []string) error {
 	if err != nil {
 		return err
 	}
-	entry, err := updateHost(cfg, host, *root, *term)
+	entry, err := updateHost(cfg, host, cmp.Or(*root, askRoot(cfg, host)), *term)
 	if err != nil {
 		return err
 	}
 	if err := syncSkill(); err != nil {
 		return err
 	}
-	done("Installed the gofer skill for Claude Code on this machine")
+	done("Installed the gofer skills for Claude Code on this machine")
 	linger, err := transport.Call(client, core.Linger, struct{}{})
 	if err != nil {
 		return err
@@ -163,24 +169,50 @@ func (a *app) init(args []string) error {
 			return err
 		}
 	}
-	checks, err := transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
+	checkBox := func() ([]core.Check, error) {
+		defer spinning("Checking " + host)()
+		return transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
+	}
+	checks, err := checkBox()
 	if err != nil {
 		return err
 	}
-	allOK := printChecks(checks)
+	if rcMissing(checks) && isTTY() {
+		keep, err := confirm("Keep Remote Control running on " + host + "?")
+		if err != nil {
+			return err
+		}
+		if keep {
+			if err := installRC(client, host, *rcName, cmp.Or(*rcDir, entry.Root)); err != nil {
+				return err
+			}
+			if checks, err = checkBox(); err != nil {
+				return err
+			}
+		}
+	}
+	allOK := printCheckSummary(checks)
 	if !loggedIn {
 		return exitCode{1, "Setup finished, but Claude isn't logged in on " + host + ". Run gofer init " + host + " in a terminal to log in"}
 	}
 	if !allOK {
 		return exitCode{1, "Setup finished, but fix the FAIL checks above before using " + host}
 	}
-	done("Ready. Try: gofer run <repo> \"<prompt>\"")
+	fmt.Println()
+	done("%s Start your first agent:", paint(bold, "Ready."))
+	fmt.Printf("  %s\n", paint(cyan, `gofer run <repo> "fix the flaky test"`))
+	fmt.Printf("\nTo set up tools, CLIs and MCP servers there, run %s in Claude Code.\n", paint(cyan, "/gofer-setup"))
 	return nil
 }
 
 func setUpBox(c *transport.Client, yes bool) (loggedIn bool, err error) {
-	fmt.Printf("Checking %s\n", c.Host)
-	if err := c.Reachable(); err != nil {
+	stop := spinning("Connecting to " + c.Host)
+	err = c.Reachable()
+	stop()
+	if !styled {
+		fmt.Printf("Checking %s\n", c.Host)
+	}
+	if err != nil {
 		return false, fmt.Errorf("can't reach %s with SSH. Check the host name and that key login works.\n%w", c.Host, err)
 	}
 	if err := ensureClaude(c, yes); err != nil {
@@ -189,7 +221,10 @@ func setUpBox(c *transport.Client, yes bool) (loggedIn bool, err error) {
 	if loggedIn, err = ensureLogin(c); err != nil {
 		return false, err
 	}
-	if err := c.Upgrade(); err != nil {
+	stop = spinning("Installing gofer on " + c.Host)
+	err = c.Upgrade()
+	stop()
+	if err != nil {
 		return false, fmt.Errorf("couldn't install gofer on %s: %w", c.Host, err)
 	}
 	done("Installed gofer on %s", c.Host)
@@ -212,13 +247,21 @@ func updateHost(cfg *config.Config, host, root, term string) (config.Host, error
 	return entry, cfg.Save()
 }
 
+func rcMissing(checks []core.Check) bool {
+	return slices.ContainsFunc(checks, func(c core.Check) bool {
+		return c.Name == core.CheckRemoteControl && c.Optional
+	})
+}
+
 func installRC(c *transport.Client, host, name, dir string) error {
 	params := core.RCParams{Name: cmp.Or(name, rcName(host)), Dir: tildePath(dir)}
+	stop := spinning("Installing Remote Control on " + host)
 	result, err := transport.Call(c, core.RCInstall, params)
+	stop()
 	if err != nil {
 		return err
 	}
-	fmt.Println(result.Note)
+	done("%s", result.Note)
 	return nil
 }
 
@@ -239,7 +282,11 @@ func ensureClaude(c *transport.Client, yes bool) error {
 		if !isTTY() {
 			return errors.New("not installing without confirmation. Run with --yes, or install Claude Code first")
 		}
-		if !confirm("Run it on " + c.Host + "?") {
+		install, err := confirm("Run it on " + c.Host + "?")
+		if err != nil {
+			return err
+		}
+		if !install {
 			return errors.New("gofer needs Claude Code on the dev box")
 		}
 	}
@@ -262,15 +309,12 @@ func ensureLogin(c *transport.Client) (bool, error) {
 	if loggedIn(c) {
 		return true, nil
 	}
-	fmt.Printf("Claude Code isn't logged in on %s.\n", c.Host)
 	if !isTTY() {
-		fmt.Printf("Login needs you at a terminal. Run: ssh -t %s %s\n", c.Host, transport.Remote(claude.LoginScript))
+		fmt.Printf("Claude Code isn't logged in on %s. Run gofer init %s in a terminal to log in.\n", c.Host, c.Host)
 		return false, nil
 	}
-	if !confirm("Log in now?") {
-		return false, nil
-	}
-	if err := c.Interactive(claude.LoginScript); err != nil {
+	fmt.Printf("Log in to Claude on %s: open the link, then paste the code.\n", c.Host)
+	if err := c.LineMode(claude.LoginScript); err != nil {
 		return false, fmt.Errorf("claude auth login failed: %w", err)
 	}
 	return loggedIn(c), nil
@@ -296,14 +340,16 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 	}
 	delete(cfg.Hosts, host)
 	if len(cfg.Hosts) == 0 {
-		path, err := skillPath()
-		if err != nil {
-			return err
+		for _, s := range skill.All {
+			path, err := skillPath(s.Name)
+			if err != nil {
+				return err
+			}
+			if err := os.RemoveAll(filepath.Dir(path)); err != nil {
+				return err
+			}
+			fmt.Println("Removed", filepath.Dir(path))
 		}
-		if err := os.RemoveAll(filepath.Dir(path)); err != nil {
-			return err
-		}
-		fmt.Println("Removed", filepath.Dir(path))
 	}
 	if cfg.DefaultHost == host {
 		cfg.DefaultHost = ""
@@ -315,22 +361,47 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 	return cfg.Save()
 }
 
-func printChecks(checks []core.Check) bool {
-	allOK := true
-	for _, c := range checks {
-		kind := "ok"
-		switch {
-		case c.Optional:
-			kind = "note"
-		case !c.OK:
-			kind = "FAIL"
-			allOK = false
-		}
-		fmt.Printf("%s %s", checkMark(kind), c.Name)
-		if c.Detail != "" {
-			fmt.Printf(": %s", c.Detail)
-		}
-		fmt.Println()
+func checkKind(c core.Check) string {
+	switch {
+	case c.Optional:
+		return "note"
+	case !c.OK:
+		return "FAIL"
 	}
-	return allOK
+	return "ok"
+}
+
+func printCheck(c core.Check) {
+	fmt.Printf("%s %s", checkMark(checkKind(c)), c.Name)
+	if c.Detail != "" {
+		fmt.Printf(": %s", c.Detail)
+	}
+	fmt.Println()
+}
+
+func printChecks(checks []core.Check) bool {
+	for _, c := range checks {
+		printCheck(c)
+	}
+	return !slices.ContainsFunc(checks, failed)
+}
+
+func failed(c core.Check) bool {
+	return checkKind(c) == "FAIL"
+}
+
+func printCheckSummary(checks []core.Check) bool {
+	if !styled {
+		return printChecks(checks)
+	}
+	passed := 0
+	for _, c := range checks {
+		if checkKind(c) == "ok" {
+			passed++
+		} else {
+			printCheck(c)
+		}
+	}
+	done("%d checks passed", passed)
+	return !slices.ContainsFunc(checks, failed)
 }

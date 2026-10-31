@@ -123,6 +123,14 @@ func (c *Client) Interactive(script string) error {
 	return cmd.Run()
 }
 
+func (c *Client) LineMode(script string) error {
+	cmd := exec.Command("ssh", c.Host, Remote(script))
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func (c *Client) Copy(source, dest string) error {
 	cmd := exec.Command("scp", "-r", "-q", "-o", "BatchMode=yes", source, dest)
 	cmd.Stdout = os.Stdout
