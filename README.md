@@ -1,6 +1,12 @@
 <div align="center">
 
-# gofer
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-text-dark.svg">
+  <img src="docs/logo-text-light.svg" alt="Gofer" width="300">
+</picture>
+
+<br>
+<br>
 
 **Hand work from your laptop to Claude Code agents on a dev box.**
 
