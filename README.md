@@ -39,7 +39,7 @@ gofer wait auth
 
 Or ask your local Claude: `gofer init` installs a skill, so "hand this off to gofer" just works.
 
-`gofer init` then offers to open Claude and set up the box. The `/dev-box-setup` skill asks what you need, then handles repos, dev tools, CLIs, MCP servers and Claude settings one at a time. You can run it again at any time.
+`gofer init` then offers to open Claude and set up the box. The `/dev-box-setup` skill asks what you need, then handles repos, dev tools, CLIs, MCP servers, Claude settings and app access one at a time. You can run it again at any time.
 
 ### Hand off your current work
 
@@ -125,7 +125,7 @@ gofer init devbox --workdir ~/code
 | --- | --- |
 | `--workdir <dir>` | Folder on the dev box where agents work |
 | `--terminal ssh\|rex` | How `gofer attach` opens |
-| `--rc` | Install the persistent Remote Control service without asking |
+| `--rc` | Keep a service running so the Claude app can start sessions |
 | `--yes` | Skip the install prompt |
 
 `gofer init --remove [host]` undoes what gofer installed. Agent state stays on the dev box.
@@ -138,8 +138,8 @@ gofer init devbox --workdir ~/code
 - **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself.
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
 - **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
-- **Remote Control:** following agents needs a claude.ai login. Gofer turns it on for its own agents.
-- **Remote sessions:** ones started from your phone or browser show in `gofer ls` and can be messaged, but not attached or removed.
+- **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login.
+- **Starting from the app:** `gofer init --rc` is optional, and separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.
 - **Lost connections:** `gofer run` can't start a second agent on retry. If `gofer send` drops, check `gofer logs` before resending.
 - **Untested:** phone push notifications and waking an agent from the phone.
 

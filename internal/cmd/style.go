@@ -50,10 +50,17 @@ type cell struct {
 	code string
 }
 
-func styleable(f *os.File) bool {
+func isTerminal(f *os.File) bool {
 	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0 &&
-		os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	null, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(info, null)
+}
+
+func styleable(f *os.File) bool {
+	return isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 }
 
 func ansi(code, text string) string {

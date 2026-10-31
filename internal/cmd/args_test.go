@@ -303,3 +303,14 @@ func TestWantsHelp(t *testing.T) {
 		}
 	}
 }
+
+func TestDevNullIsNotATerminal(t *testing.T) {
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	if isTerminal(null) {
+		t.Fatal("/dev/null counted as a terminal")
+	}
+}

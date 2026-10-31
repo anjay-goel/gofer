@@ -33,6 +33,7 @@ Ask one multi-select question with the areas where something is missing:
 - CLIs
 - MCP servers
 - Claude plugins and settings
+- Start sessions from the Claude app
 
 Leave out areas with nothing to do. If the box is already ready, say so and stop.
 
@@ -51,6 +52,7 @@ Area notes:
 - **Dev tools:** use each tool's official installer, and prefer user-level installs.
 - **CLIs:** check each one's login after installing.
 - **Claude plugins and settings:** show a setting before changing it.
+- **Start sessions from the Claude app:** this keeps a service running so the user can begin work from the app or claude.ai/code with no laptop. They don't need it to follow agents. If gofer is set up, run `gofer init <host> --rc`. Otherwise help them run `claude remote-control` as a user service. It needs a working directory other than the home folder.
 
 Repos may also expect `.env` files or keys. Tell the user which ones, and they add them themselves.
 

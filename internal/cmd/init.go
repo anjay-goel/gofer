@@ -22,8 +22,7 @@ import (
 )
 
 func isTTY() bool {
-	info, err := os.Stdin.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return isTerminal(os.Stdin)
 }
 
 var stdin = bufio.NewReader(os.Stdin)
@@ -171,27 +170,11 @@ func (a *app) init(args []string) error {
 			return err
 		}
 	}
-	checkBox := func() ([]core.Check, error) {
-		defer spinning("Checking " + host)()
-		return transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
-	}
-	checks, err := checkBox()
+	stop := spinning("Checking " + host)
+	checks, err := transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
+	stop()
 	if err != nil {
 		return err
-	}
-	if rcMissing(checks) && isTTY() && entry.Root != "~" {
-		keep, err := confirm("Keep Remote Control running on " + host + "?")
-		if err != nil {
-			return err
-		}
-		if keep {
-			if err := installRC(client, host, *rcName, cmp.Or(*rcDir, entry.Root)); err != nil {
-				return err
-			}
-			if checks, err = checkBox(); err != nil {
-				return err
-			}
-		}
 	}
 	allOK := printCheckSummary(checks)
 	if !loggedIn {
@@ -208,7 +191,7 @@ func (a *app) init(args []string) error {
 
 func offerBoxSetup(host string) error {
 	path, err := exec.LookPath("claude")
-	if err != nil || !isTTY() {
+	if err != nil || !interactive() {
 		return nil
 	}
 	fmt.Println()
@@ -259,12 +242,6 @@ func updateHost(cfg *config.Config, host, root, term string) (config.Host, error
 	cfg.Hosts[host] = entry
 	cfg.DefaultHost = host
 	return entry, cfg.Save()
-}
-
-func rcMissing(checks []core.Check) bool {
-	return slices.ContainsFunc(checks, func(c core.Check) bool {
-		return c.Name == core.CheckRemoteControl && c.Optional
-	})
 }
 
 func installRC(c *transport.Client, host, name, dir string) error {
@@ -376,10 +353,7 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 }
 
 func checkKind(c core.Check) string {
-	switch {
-	case c.Optional:
-		return "note"
-	case !c.OK:
+	if !c.OK {
 		return "FAIL"
 	}
 	return "ok"

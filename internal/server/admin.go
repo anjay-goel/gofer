@@ -168,9 +168,6 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 	add := func(name string, ok bool, detail string) {
 		checks = append(checks, core.Check{Name: name, OK: ok, Detail: detail})
 	}
-	note := func(name, detail string) {
-		checks = append(checks, core.Check{Name: name, Optional: true, Detail: detail})
-	}
 	if !s.Driver.Installed() {
 		add("claude installed", false, "not found on the dev box")
 		return checks, nil
@@ -209,11 +206,9 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		state, _ := systemctl("is-active", "claude-rc.service")
 		switch {
 		case state == "active":
-			add(core.CheckRemoteControl, true, "claude-rc is active")
+			add("remote control service", true, "claude-rc is active")
 		case s.ownsUnit():
-			add(core.CheckRemoteControl, false, "claude-rc is "+state+", and gofer installed it. Check journalctl --user -u claude-rc")
-		default:
-			note(core.CheckRemoteControl, "off. Run gofer init --rc to keep it running")
+			add("remote control service", false, "claude-rc is "+state+", and gofer installed it. Check journalctl --user -u claude-rc")
 		}
 	}
 	return checks, nil
