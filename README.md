@@ -93,6 +93,8 @@ If the connection drops during `gofer run`, it retries with the same request ID,
 
 ## How it works
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and code layout. In short:
+
 The laptop runs the `gofer` client. Each command runs `gofer rpc` on the dev box over SSH, sending JSON on stdin, then exits. `gofer attach` and `gofer cp` then open their own `ssh` or `scp` connection. Updates only travel over connections the laptop opens.
 
 Remote commands run through `sh`, so your login shell on the dev box can be fish or anything else. Hooks passed through `claude --settings` record session IDs, socket paths and turn events in `~/.local/state/gofer/agents/<name>/`. Gofer never changes your Claude settings or SSH config. Messages use the inbox socket Claude gives each session. A prompt, document or waking message over 100 KB goes in the agent's state folder, and the agent is told to read it. Your laptop keeps its hosts in `~/.config/gofer/config.json`.
