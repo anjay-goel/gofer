@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 340" role="img" aria-label="The gofer client on the laptop runs gofer rpc on the dev box over SSH. gofer rpc starts and messages Claude agents and keeps agent records, which hooks update. The phone reaches the same agents through Anthropic's relay and Remote Control. Code moves between the laptop and the agent's worktree with git.">
+  <title>How gofer connects a laptop, a dev box and a phone</title>
+  <style>
+    svg { --frame: #f6f8fa; --edge: #d0d7de; --box: #ffffff; --ink: #1f2328; --muted: #656d76; --ssh: #0969da; --ssh-tint: #ddf4ff; --relay: #8250df; --relay-tint: #fbefff; --git: #1a7f37; --git-tint: #dafbe1; }
+    @media (prefers-color-scheme: dark) {
+      svg { --frame: #161b22; --edge: #30363d; --box: #0d1117; --ink: #e6edf3; --muted: #8d96a0; --ssh: #58a6ff; --ssh-tint: #0c2d6b; --relay: #bc8cff; --relay-tint: #2d1b4e; --git: #3fb950; --git-tint: #0f3320; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); }
+    .frame { fill: var(--frame); stroke: var(--edge); }
+    .box { fill: var(--box); stroke: var(--edge); }
+    .hot { fill: var(--ssh-tint); stroke: var(--ssh); }
+    .rc { fill: var(--relay-tint); stroke: var(--relay); }
+    .code { fill: var(--git-tint); stroke: var(--git); }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; fill: var(--muted); }
+    .title { font-size: 14px; font-weight: 600; text-anchor: middle; }
+    .sub { font-size: 11.5px; fill: var(--muted); text-anchor: middle; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; fill: var(--muted); text-anchor: middle; }
+    .label { font-size: 12px; font-weight: 600; text-anchor: middle; }
+    .note { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+    .wire { fill: none; stroke-width: 1.6; }
+    .plain { stroke: var(--muted); }
+    .ssh { stroke: var(--ssh); stroke-width: 2; }
+    .relay { stroke: var(--relay); }
+    .git { stroke: var(--git); }
+    .head-plain { fill: var(--muted); }
+    .head-ssh { fill: var(--ssh); }
+    .head-relay { fill: var(--relay); }
+    .head-git { fill: var(--git); }
+    .text-ssh { fill: var(--ssh); }
+    .text-relay { fill: var(--relay); }
+    .text-git { fill: var(--git); }
+  </style>
+  <defs>
+    <marker id="plain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head-plain"/></marker>
+    <marker id="ssh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head-ssh"/></marker>
+    <marker id="relay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head-relay"/></marker>
+    <marker id="git" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head-git"/></marker>
+  </defs>
+
+  <rect class="frame" x="16" y="96" width="220" height="126" rx="10"/>
+  <text class="eyebrow" x="32" y="115">LAPTOP</text>
+  <rect class="frame" x="340" y="12" width="524" height="294" rx="10"/>
+  <text class="eyebrow" x="356" y="32">DEV BOX</text>
+
+  <rect class="box" x="32" y="36" width="188" height="44" rx="7"/>
+  <text class="title" x="126" y="54">Phone</text>
+  <text class="sub" x="126" y="70">Claude app, claude.ai/code</text>
+
+  <rect class="box" x="32" y="122" width="188" height="28" rx="7"/>
+  <text class="title" x="126" y="141" style="font-size:13px">You or your agent</text>
+  <rect class="hot" x="32" y="166" width="188" height="44" rx="7"/>
+  <text class="title" x="126" y="185">gofer</text>
+  <text class="sub" x="126" y="201">CLI and Claude skill</text>
+  <path class="wire plain" d="M126 150V166" marker-end="url(#plain)"/>
+
+  <rect class="rc" x="640" y="36" width="204" height="44" rx="7"/>
+  <text class="title" x="742" y="54">Remote Control</text>
+  <text class="sub" x="742" y="70">session sync, optional claude-rc</text>
+
+  <rect class="hot" x="368" y="162" width="140" height="52" rx="7"/>
+  <text class="title" x="438" y="183">gofer rpc</text>
+  <text class="sub" x="438" y="200">one call, then exits</text>
+
+  <rect class="box" x="640" y="152" width="204" height="62" rx="7"/>
+  <text class="title" x="742" y="176">Claude agents</text>
+  <text class="mono" x="742" y="196">claude --bg</text>
+
+  <rect class="box" x="368" y="246" width="140" height="44" rx="7"/>
+  <text class="title" x="438" y="264">Agent records</text>
+  <text class="sub" x="438" y="280">state, events, hooks</text>
+
+  <rect class="code" x="640" y="246" width="204" height="44" rx="7"/>
+  <text class="title" x="742" y="264">Git worktree</text>
+  <text class="mono" x="742" y="280">agent/&lt;name&gt;</text>
+
+  <path class="wire relay" d="M220 58H640" marker-start="url(#relay)" marker-end="url(#relay)"/>
+  <text class="label text-relay" x="288" y="50">Anthropic relay</text>
+  <path class="wire relay" d="M742 80V152" marker-start="url(#relay)" marker-end="url(#relay)"/>
+  <text class="note" x="752" y="120" style="text-anchor:start">chat and view</text>
+
+  <path class="wire ssh" d="M220 188H368" marker-end="url(#ssh)"/>
+  <text class="label text-ssh" x="290" y="180">SSH</text>
+  <text class="note" x="290" y="204">LAN or VPN</text>
+
+  <path class="wire plain" d="M508 188H640" marker-end="url(#plain)"/>
+  <text class="note" x="574" y="180">start, send</text>
+
+  <path class="wire plain" d="M438 214V246" marker-start="url(#plain)" marker-end="url(#plain)"/>
+  <path class="wire plain" d="M640 202H574V268H508" marker-end="url(#plain)"/>
+  <text class="note" x="582" y="240" style="text-anchor:start">hooks</text>
+
+  <path class="wire plain" d="M742 214V246" marker-start="url(#plain)" marker-end="url(#plain)"/>
+
+  <path class="wire git" d="M126 210V324H742V290" marker-start="url(#git)" marker-end="url(#git)"/>
+  <text class="label text-git" x="288" y="316">git push and fetch</text>
+</svg>
