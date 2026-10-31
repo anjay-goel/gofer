@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,10 @@ func TestPhase(t *testing.T) {
 	}{
 		{Session{Status: "busy", State: "working"}, core.StateRunning},
 		{Session{Status: "idle", State: "done"}, core.StateIdle},
+		{Session{Status: "idle", State: "blocked"}, core.StateIdle},
+		{Session{Status: "idle", State: "working"}, core.StateRunning},
+		{Session{Status: "busy", State: "done"}, core.StateRunning},
+		{Session{Status: "idle"}, core.StateIdle},
 		{Session{Status: "waiting", State: "blocked"}, core.StateBlocked},
 		{Session{State: "working"}, core.StateRunning},
 		{Session{State: "blocked", PID: 42}, core.StateBlocked},
@@ -90,6 +95,12 @@ func TestConfigWritesKeepOtherFields(t *testing.T) {
 	if !d.Trusted("/repo", "/repo") || !d.Trusted("/old", "/old") {
 		t.Fatalf("trust is wrong:\n%s", data)
 	}
+	if err := d.Forget("/old", ""); err != nil {
+		t.Fatal(err)
+	}
+	if d.Trusted("/old", "/old") || !d.Trusted("/repo", "/repo") {
+		t.Fatal("forget changed the wrong folder")
+	}
 	if info, _ := os.Stat(config); info.Mode().Perm() != 0o640 {
 		t.Fatalf("mode = %v", info.Mode())
 	}
@@ -112,6 +123,26 @@ func TestLaunchArgs(t *testing.T) {
 	want := []string{"--name", "a", "--permission-mode", "auto", "--settings", "s", "--remote-control"}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("args = %v", args)
+	}
+}
+
+func TestHookSettingsDenyDialogs(t *testing.T) {
+	for _, bypass := range []bool{false, true} {
+		data, err := HookSettings("hook", bypass)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var settings struct {
+			Permissions struct {
+				Deny []string `json:"deny"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(data, &settings); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(settings.Permissions.Deny, []string{"AskUserQuestion", "EnterPlanMode"}) {
+			t.Fatalf("bypass %v: deny = %v", bypass, settings.Permissions.Deny)
+		}
 	}
 }
 

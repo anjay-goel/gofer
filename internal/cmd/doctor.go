@@ -53,11 +53,11 @@ func (a *app) doctor(args []string) error {
 func (a *app) smoke() error {
 	name := fmt.Sprintf("gofer-smoke-%d", time.Now().Unix())
 	prompt := "Reply with the word READY and nothing else. For any later message, reply with ECHO followed by its first word."
-	params := core.RunParams{RequestID: core.NewRequestID(), Name: name, Repo: ".", Root: a.hostCfg.Root, Prompt: prompt, Model: "haiku"}
+	params := core.RunParams{RequestID: core.NewRequestID(), Name: name, Scratch: true, Root: a.hostCfg.Root, Prompt: prompt, Model: "haiku"}
+	defer transport.Call(a.client, core.Remove, core.RemoveParams{Name: name, Force: true})
 	if _, err := a.start(params); err != nil {
 		return fmt.Errorf("live test couldn't start an agent: %w", err)
 	}
-	defer transport.Call(a.client, core.Remove, core.RemoveParams{Name: name, Force: true})
 	r, err := transport.Call(a.client, core.Wait, core.WaitParams{Names: []string{name}, Timeout: 90})
 	if err != nil {
 		return err

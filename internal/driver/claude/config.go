@@ -121,7 +121,7 @@ func setField(doc document, key string, value bool) error {
 	return err
 }
 
-func (d *Driver) Trust(dir string) error {
+func (d *Driver) changeProjects(change func(document) error) error {
 	return updateDocument(d.globalConfig(), func(doc document) error {
 		projects := document{}
 		if raw, ok := doc["projects"]; ok {
@@ -129,6 +129,17 @@ func (d *Driver) Trust(dir string) error {
 				return err
 			}
 		}
+		if err := change(projects); err != nil {
+			return err
+		}
+		var err error
+		doc["projects"], err = json.Marshal(projects)
+		return err
+	})
+}
+
+func (d *Driver) Trust(dir string) error {
+	return d.changeProjects(func(projects document) error {
 		project := document{}
 		if raw, ok := projects[dir]; ok {
 			if err := json.Unmarshal(raw, &project); err != nil {
@@ -139,11 +150,20 @@ func (d *Driver) Trust(dir string) error {
 			return err
 		}
 		var err error
-		if projects[dir], err = json.Marshal(project); err != nil {
+		projects[dir], err = json.Marshal(project)
+		return err
+	})
+}
+
+func (d *Driver) Forget(dir, sessionID string) error {
+	if path := d.transcriptPath(sessionID); path != "" {
+		if err := os.RemoveAll(filepath.Dir(path)); err != nil {
 			return err
 		}
-		doc["projects"], err = json.Marshal(projects)
-		return err
+	}
+	return d.changeProjects(func(projects document) error {
+		delete(projects, dir)
+		return nil
 	})
 }
 

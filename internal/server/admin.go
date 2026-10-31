@@ -89,7 +89,7 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		add("working directory", false, root+" doesn't exist")
 	} else {
 		add("working directory", true, root)
-		add("workspace trust", true, "gofer run trusts folders under "+root)
+		add("workspace trust", true, s.trustNote(root))
 	}
 	if systemdBooted() {
 		if lingering() {
@@ -99,6 +99,14 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		}
 	}
 	return checks, nil
+}
+
+func (s *Server) trustNote(root string) string {
+	note := "gofer run trusts folders under " + root
+	if root == s.Home {
+		note += ", but not the home folder itself. Run agents in a folder inside it"
+	}
+	return note
 }
 
 func tooOldGit(version string) bool {

@@ -21,7 +21,7 @@ make install
 - Keep Claude Code formats, flags and CLI facts in `internal/driver/claude`.
 - Keep types that cross SSH in `internal/core`. `internal/store` imports no other internal package.
 - Never use `claude -p` or the Agent SDK. Agents are `claude --bg` sessions.
-- Never change the user's SSH config. Hooks go in per session through `--settings`. The only Claude values gofer writes are `hasTrustDialogAccepted` for folders under the working directory, and `skipDangerousModePermissionPrompt` when someone passes `--bypass`, both through `internal/driver/claude/config.go`.
+- Never change the user's SSH config. Hooks go in per session through `--settings`. The only Claude values gofer writes are `hasTrustDialogAccepted` for folders under the working directory, and `skipDangerousModePermissionPrompt` when someone passes `--bypass`, both through `internal/driver/claude/config.go`. `gofer doctor --live` removes its throwaway folder's entry afterwards.
 - Colour and symbols appear only through `internal/cmd/style.go`, and output stays plain when it isn't going to a terminal.
 - Fix root causes rather than adding retries or special cases.
 

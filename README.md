@@ -91,7 +91,7 @@ gofer run api --doc plan.md --worktree --name auth
 | `wait` | `--timeout <seconds>` | Stop waiting after this long |
 | `attach` | `--rex`, `--ssh` | Choose Rex or SSH. Rex falls back to SSH |
 | `rm` | `--force` | Remove despite uncommitted or unfetched work |
-| `doctor` | `--live` | Run a small test agent in the working directory |
+| `doctor` | `--live` | Run a small test agent in a throwaway folder |
 | Any | `--host <host>` | Use another dev box, or set `GOFER_HOST` |
 | `run`, `ls`, `wait` | `--json` | Print JSON |
 
@@ -140,8 +140,10 @@ gofer init devbox --workdir ~/code
 ## Good to know
 
 - **Folders:** `<dir>` is a folder in your working directory, or a full path. It must already exist on the dev box, and `.` means the one named like your current folder.
-- **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself.
+- **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself. Claude never saves trust for the home folder, so run agents in a folder inside it.
+- **Questions:** gofer turns off question dialogs and plan mode for its agents, so they can't hang overnight. They ask in plain text and end their turn, and `gofer send` answers.
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
+- **Scheduled work:** an agent with a `/loop` or wakeup pending counts as running, so `gofer wait` keeps waiting. Use `--timeout` to stop sooner.
 - **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
 - **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login.
 - **Starting from the app:** `/dev-box-setup` can add this. It's separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.

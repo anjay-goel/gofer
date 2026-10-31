@@ -34,6 +34,8 @@ type Agent struct {
 	Effort    string    `json:"effort,omitempty"`
 	Socket    string    `json:"socket,omitempty"`
 	Failure   string    `json:"failure,omitempty"`
+	Pending   bool      `json:"pending,omitempty"`
+	Scratch   bool      `json:"scratch,omitempty"`
 	Created   time.Time `json:"created"`
 	LastInput time.Time `json:"last_input"`
 	LastToken string    `json:"last_token,omitempty"`

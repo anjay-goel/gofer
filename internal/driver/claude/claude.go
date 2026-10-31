@@ -51,6 +51,9 @@ func (s Session) Phase() core.State {
 	case "busy":
 		return core.StateRunning
 	case "idle":
+		if s.State == "working" {
+			return core.StateRunning
+		}
 		return core.StateIdle
 	case "waiting":
 		return core.StateBlocked
@@ -70,6 +73,10 @@ func (s Session) Phase() core.State {
 		}
 	}
 	return core.StateUnknown
+}
+
+func (s Session) BetweenSteps() bool {
+	return s.Status == "idle" && s.State == "working"
 }
 
 func (s Session) Source(rec Record) string {

@@ -64,6 +64,8 @@ func (t target) managed() bool { return t.agent.Name != "" }
 
 func (t target) state() core.State {
 	switch {
+	case t.listed && t.managed() && t.sess.BetweenSteps() && !t.agent.Pending:
+		return core.StateIdle
 	case t.listed:
 		return t.sess.Phase()
 	case t.agent.SessionID == "":

@@ -55,7 +55,7 @@ gofer wait <name> <name2>
 - Exit 2 means an agent is blocked.
 - Exit 3 means an agent is idle but its turn can't be confirmed finished, so what it printed may be stale. Check `gofer logs <name>` before relying on it.
 - Exit 4 means an agent failed or was cut short, so its work is unfinished. Read what it printed, then use `gofer send` to wake it or tell the user.
-- Exit 124 means `--timeout` ran out.
+- Exit 124 means `--timeout` ran out. An agent with a `/loop` or wakeup pending counts as running, so pass `--timeout` when waiting on one.
 - Exit 1 is an error, such as SSH login failing or an unknown name. Read its message.
 
 If several apply, the first of 2, 4 and 3 wins.
@@ -76,9 +76,9 @@ This works for running and stopped agents. It reports whether the message landed
 
 ## Blocked agents
 
-A message can't approve a permission prompt or answer a question dialog, so `gofer send` refuses while an agent is blocked. Tell the user and give them `gofer attach <name>`.
+A message can't approve a permission prompt, so `gofer send` refuses while an agent is blocked. Tell the user and give them `gofer attach <name>`.
 
-An agent that ended its turn with a question in its reply isn't blocked. `gofer wait` exits 0 for it, so answer with `gofer send`.
+Agents can't open question dialogs or plan mode. They ask in their reply and end their turn, which isn't blocked. `gofer wait` exits 0 for it, so answer with `gofer send`.
 
 ## Files and code
 

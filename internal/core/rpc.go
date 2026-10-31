@@ -68,6 +68,7 @@ type RunParams struct {
 	Effort    string `json:"effort,omitempty"`
 	Bypass    bool   `json:"bypass"`
 	Base      string `json:"base,omitempty"`
+	Scratch   bool   `json:"scratch,omitempty"`
 }
 
 type ListParams struct {

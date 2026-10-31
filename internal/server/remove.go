@@ -40,6 +40,11 @@ func (s *Server) remove(p core.RemoveParams) (core.RemoveResult, error) {
 			return result, err
 		}
 	}
+	if a.Scratch {
+		if err := s.dropScratch(a); err != nil {
+			return result, err
+		}
+	}
 	return result, s.Store.Delete(a.Name)
 }
 

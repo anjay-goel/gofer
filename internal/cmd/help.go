@@ -91,7 +91,7 @@ Options:
 Check the setup.
 
 Options:
-  --live  Run a small test agent in the working directory
+  --live  Run a small test agent in a throwaway folder
 `,
 }
 

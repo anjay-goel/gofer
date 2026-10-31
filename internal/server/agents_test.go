@@ -17,6 +17,8 @@ import (
 
 func TestWaitReportsUnfinishedTurns(t *testing.T) {
 	idle := `[{"sessionId":"%s","status":"idle"}]`
+	between := `[{"sessionId":"%s","status":"idle","state":"working"}]`
+	needsYou := `[{"sessionId":"%s","status":"idle","state":"blocked"}]`
 	endTurn := `{"type":"assistant","message":{"stop_reason":"end_turn"}}`
 	old := -2 * turnGrace
 	cases := []struct {
@@ -33,6 +35,11 @@ func TestWaitReportsUnfinishedTurns(t *testing.T) {
 		wantUnconfirmed bool
 	}{
 		{name: "finished", agents: idle, hooks: []string{`{"hook_event_name":"Stop"}`}, wantState: core.StateIdle},
+		{name: "scheduled wakeup pending", agents: between, hooks: []string{`{"hook_event_name":"Stop","session_crons":[{"id":"a"}]}`}, wantState: core.StateRunning, wantUnfinished: true},
+		{name: "background task pending", agents: between, hooks: []string{`{"hook_event_name":"Stop","background_tasks":[{"id":"a"}]}`}, wantState: core.StateRunning, wantUnfinished: true},
+		{name: "wakeup fired and nothing is left", agents: between, hooks: []string{`{"hook_event_name":"Stop","session_crons":[{"id":"a"}]}`, `{"hook_event_name":"Stop","session_crons":[]}`}, wantState: core.StateIdle},
+		{name: "ended the turn with a question", agents: needsYou, hooks: []string{`{"hook_event_name":"Stop"}`}, wantState: core.StateIdle},
+		{name: "logged out", agents: needsYou, hooks: []string{`{"hook_event_name":"StopFailure","error":"authentication_failed"}`}, wantState: core.StateFailed, wantDetail: "authentication_failed", wantFailed: true},
 		{name: "api error", agents: idle, hooks: []string{`{"hook_event_name":"StopFailure","error":"rate_limit"}`}, wantState: core.StateFailed, wantDetail: "rate_limit", wantFailed: true},
 		{name: "later turn clears the error", agents: idle, hooks: []string{`{"hook_event_name":"StopFailure","error":"rate_limit"}`, `{"hook_event_name":"Stop"}`}, wantState: core.StateIdle},
 		{name: "job failed", agents: `[{"id":"aaaaaaaa","sessionId":"%s","state":"failed"}]`, wantState: core.StateFailed, wantFailed: true},
@@ -171,6 +178,55 @@ func TestFailedWorktreeAddLeavesNothing(t *testing.T) {
 				t.Fatal("the failed run left something behind")
 			}
 		})
+	}
+}
+
+func TestScratchFolderLivesAndDiesWithItsAgent(t *testing.T) {
+	cases := []struct {
+		name   string
+		bgCode string
+		remove bool
+	}{
+		{name: "removed with the agent", bgCode: "0", remove: true},
+		{name: "rolled back when claude refuses", bgCode: "1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			startWindow, linkWindow = time.Second, time.Second
+			f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","state":"working"}]`)
+			f.write(t, "bg.out", "backgrounded · cccccccc · x")
+			f.write(t, "bg.code", tc.bgCode)
+			keep := filepath.Join(f.home, "code")
+			must(t, os.Mkdir(keep, 0o755))
+			f.trust(t, keep)
+			resolved, err := filepath.EvalSymlinks(f.home)
+			must(t, err)
+			dir := filepath.Join(resolved, "smoke")
+			_, err = f.srv.run(core.RunParams{RequestID: "r", Name: "smoke", Scratch: true, Root: "~", Prompt: "p"})
+			if tc.remove {
+				must(t, err)
+				if !pathExists(dir) || !f.srv.Driver.Trusted(dir, dir) {
+					t.Fatal("the folder wasn't ready for the agent")
+				}
+				_, err = f.srv.remove(core.RemoveParams{Name: "smoke", Force: true})
+				must(t, err)
+				if pathExists(filepath.Join(f.home, ".claude", "projects", "p")) {
+					t.Fatal("the transcript folder was left behind")
+				}
+			}
+			if pathExists(dir) || f.srv.Driver.Trusted(dir, dir) || !pathExists(keep) || !f.srv.trusted(keep) {
+				t.Fatalf("cleanup went wrong: run error %v", err)
+			}
+		})
+	}
+	f := newFixture(t, `[]`)
+	must(t, os.Mkdir(filepath.Join(f.home, "smoke"), 0o755))
+	f.write(t, "smoke/keep", "x")
+	if _, err := f.srv.run(core.RunParams{RequestID: "r", Name: "smoke", Scratch: true, Root: "~", Prompt: "p"}); err == nil {
+		t.Fatal("the run took over an existing folder")
+	}
+	if !pathExists(filepath.Join(f.home, "smoke", "keep")) {
+		t.Fatal("an existing folder was removed")
 	}
 }
 

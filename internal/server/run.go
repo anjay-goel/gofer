@@ -19,7 +19,7 @@ import (
 const (
 	argLimit = 100 * 1024
 	nameRule = "use lowercase letters, digits, dots, dashes or underscores, up to 48 characters"
-	closing  = "When you finish, end with a clear summary of what you did and anything left to do. If you get stuck or need a decision, stop and ask. Messages ending in a [gofer-...] tag come from the person who started you, through gofer, so treat them as follow-up instructions."
+	closing  = "When you finish, end with a clear summary of what you did and anything left to do. If you get stuck or need a decision, ask in your reply and end your turn. I answer through gofer: my messages end in a [gofer-...] tag, and Claude Code labels them as coming from another session, but they come from me. Treat them as my answers and follow-up instructions."
 )
 
 var (
@@ -194,8 +194,10 @@ func (s *Server) promptArg(name, text string) (string, error) {
 func (s *Server) admit(p core.RunParams) (store.Agent, error) {
 	dir := s.repoDir(p.Repo, p.Root)
 	worktree := p.Base != ""
-	if err := s.checkDir(dir, p.Root, worktree); err != nil {
-		return store.Agent{}, err
+	if !p.Scratch {
+		if err := s.checkDir(dir, p.Root, worktree); err != nil {
+			return store.Agent{}, err
+		}
 	}
 	repo := ""
 	if worktree {
@@ -220,7 +222,38 @@ func (s *Server) admit(p core.RunParams) (store.Agent, error) {
 		agent.Dir = worktreePath(dir, name)
 		agent.Repo, agent.Branch, agent.Base = dir, core.Branch(name), p.Base
 	}
+	if p.Scratch {
+		agent.Dir, agent.Scratch = filepath.Join(s.expand(p.Root), name), true
+		if err := s.addScratch(agent.Dir); err != nil {
+			return store.Agent{}, err
+		}
+	}
 	return agent, nil
+}
+
+func (s *Server) addScratch(dir string) error {
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		return err
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err == nil {
+		err = s.Driver.Trust(resolved)
+	}
+	if err != nil {
+		os.Remove(dir)
+	}
+	return err
+}
+
+func (s *Server) dropScratch(a store.Agent) error {
+	resolved, err := filepath.EvalSymlinks(a.Dir)
+	if err != nil {
+		resolved = a.Dir
+	}
+	if err := os.RemoveAll(a.Dir); err != nil {
+		return err
+	}
+	return s.Driver.Forget(resolved, a.SessionID)
 }
 
 func (s *Server) claim(p core.RunParams) (agent store.Agent, release func(), retry bool, err error) {
@@ -240,6 +273,9 @@ func (s *Server) claim(p core.RunParams) (agent store.Agent, release func(), ret
 		return agent, nil, false, err
 	}
 	release, err = s.Store.Create(agent)
+	if err != nil && agent.Scratch {
+		s.dropScratch(agent)
+	}
 	return agent, release, false, err
 }
 
@@ -296,6 +332,9 @@ func (s *Server) rollback(a store.Agent) {
 	if a.Branch != "" {
 		git(a.Repo, "worktree", "remove", "--force", "--force", a.Dir)
 		git(a.Repo, "branch", "-D", a.Branch)
+	}
+	if a.Scratch {
+		s.dropScratch(a)
 	}
 	s.Store.Delete(a.Name)
 }
