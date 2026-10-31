@@ -20,10 +20,9 @@ const (
 	bold   = "1"
 	dim    = "2"
 
-	columnGap = 2
-	ellipsis  = "…"
-	bell      = "\a"
-	osc       = "\x1b]"
+	ellipsis = "…"
+	bell     = "\a"
+	osc      = "\x1b]"
 )
 
 var (
@@ -122,10 +121,12 @@ func clipWidth(text string, limit int) string {
 	return text
 }
 
+func alertable() bool {
+	return isTerminal(os.Stdout) && os.Getenv("TERM") != "dumb"
+}
+
 func terminalAlert(text string) {
-	if isTerminal(os.Stdout) && os.Getenv("TERM") != "dumb" {
-		fmt.Print(osc + "9;" + text + bell + bell)
-	}
+	fmt.Print(osc + "9;" + text + bell + bell)
 }
 
 func ansi(code, text string) string {
@@ -180,6 +181,20 @@ func checkMark(kind string) string {
 	return checkLooks[kind].String()
 }
 
+func stateLabel(v core.View, limit int) string {
+	detail := v.Detail
+	if v.Cut {
+		detail = "cut short"
+	}
+	if detail == "" {
+		return string(v.State)
+	}
+	if limit > 0 {
+		detail = clipWidth(core.OneLine(detail), limit)
+	}
+	return fmt.Sprintf("%s (%s)", v.State, detail)
+}
+
 func stateCell(v core.View, limit int) cell {
 	look := stateLooks[v.State]
 	label := stateLabel(v, limit)
@@ -187,28 +202,4 @@ func stateCell(v core.View, limit int) cell {
 		label = look.text + " " + label
 	}
 	return cell{label, look.code}
-}
-
-func table(rows [][]cell) string {
-	widths := map[int]int{}
-	for _, row := range rows {
-		for i, c := range row {
-			widths[i] = max(widths[i], displayWidth(c.text))
-		}
-	}
-	var out strings.Builder
-	for _, row := range rows {
-		last := len(row) - 1
-		for last > 0 && row[last].text == "" {
-			last--
-		}
-		for i, c := range row[:last+1] {
-			out.WriteString(c.String())
-			if i < last {
-				out.WriteString(strings.Repeat(" ", widths[i]-displayWidth(c.text)+columnGap))
-			}
-		}
-		out.WriteByte('\n')
-	}
-	return out.String()
 }

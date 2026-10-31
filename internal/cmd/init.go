@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"cmp"
 	"errors"
 	"flag"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"syscall"
 
@@ -19,17 +17,6 @@ import (
 	"github.com/anjay-goel/gofer/internal/transport"
 	"github.com/anjay-goel/gofer/skill"
 )
-
-func isTTY() bool {
-	return isTerminal(os.Stdin)
-}
-
-var stdin = bufio.NewReader(os.Stdin)
-
-func readLine() string {
-	line, _ := stdin.ReadString('\n')
-	return strings.TrimSpace(line)
-}
 
 func askRoot(cfg *config.Config, host string) string {
 	if !isTTY() || cfg.Hosts[host].Root != "" {
@@ -76,17 +63,9 @@ func tildePath(path string) string {
 	return path
 }
 
-func skillPath(name string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".claude", "skills", name, "SKILL.md"), nil
-}
-
 func syncSkill() error {
 	for _, s := range skill.All {
-		path, err := skillPath(s.Name)
+		path, err := claude.SkillPath(s.Name)
 		if err != nil {
 			return err
 		}
@@ -161,9 +140,7 @@ func (a *app) init(args []string) error {
 	if linger.Note != "" {
 		fmt.Println(linger.Note)
 	}
-	stop := spinning("Checking " + host)
-	checks, err := transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
-	stop()
+	checks, err := spinCall(client, "Checking "+host, core.Doctor, core.DoctorParams{Root: entry.Root})
 	if err != nil {
 		return err
 	}
@@ -303,7 +280,7 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 	delete(cfg.Hosts, host)
 	if len(cfg.Hosts) == 0 {
 		for _, s := range skill.All {
-			path, err := skillPath(s.Name)
+			path, err := claude.SkillPath(s.Name)
 			if err != nil {
 				return err
 			}
@@ -321,46 +298,4 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 		}
 	}
 	return cfg.Save()
-}
-
-func checkKind(c core.Check) string {
-	if !c.OK {
-		return "FAIL"
-	}
-	return "ok"
-}
-
-func printCheck(c core.Check) {
-	fmt.Printf("%s %s", checkMark(checkKind(c)), c.Name)
-	if c.Detail != "" {
-		fmt.Printf(": %s", c.Detail)
-	}
-	fmt.Println()
-}
-
-func printChecks(checks []core.Check) bool {
-	for _, c := range checks {
-		printCheck(c)
-	}
-	return !slices.ContainsFunc(checks, failed)
-}
-
-func failed(c core.Check) bool {
-	return checkKind(c) == "FAIL"
-}
-
-func printCheckSummary(checks []core.Check) bool {
-	if !styled {
-		return printChecks(checks)
-	}
-	passed := 0
-	for _, c := range checks {
-		if checkKind(c) == "ok" {
-			passed++
-		} else {
-			printCheck(c)
-		}
-	}
-	done("%d checks passed", passed)
-	return !slices.ContainsFunc(checks, failed)
 }

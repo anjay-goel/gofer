@@ -11,26 +11,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anjay-goel/gofer/internal/driver/claude"
 	"github.com/anjay-goel/gofer/internal/proc"
 	"github.com/anjay-goel/gofer/internal/store"
 )
 
-const (
-	gitLimit     = 2 * time.Minute
-	worktreesDir = ".claude/worktrees/"
-)
+const gitLimit = 2 * time.Minute
 
 func git(dir string, args ...string) (string, error) {
 	return proc.Cmd{Name: "git", Args: args, Dir: dir, Limit: gitLimit}.Output()
 }
 
 func worktreePath(repo, name string) string {
-	return filepath.Join(repo, filepath.FromSlash(worktreesDir), name)
+	return filepath.Join(repo, filepath.FromSlash(claude.WorktreesDir), name)
 }
 
 func addWorktree(a store.Agent) error {
 	if err := excludeWorktrees(a.Repo); err != nil {
-		return fmt.Errorf("couldn't add %s to the repo's git exclude file: %w", worktreesDir, err)
+		return fmt.Errorf("couldn't add %s to the repo's git exclude file: %w", claude.WorktreesDir, err)
 	}
 	if _, err := git(a.Repo, "worktree", "add", "-b", a.Branch, a.Dir, a.Base); err != nil {
 		return fmt.Errorf("couldn't create the worktree: %w", err)
@@ -50,7 +48,7 @@ func excludeWorktrees(repo string) error {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if slices.Contains(strings.Split(string(data), "\n"), worktreesDir) {
+	if slices.Contains(strings.Split(string(data), "\n"), claude.WorktreesDir) {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
@@ -61,7 +59,7 @@ func excludeWorktrees(repo string) error {
 		return err
 	}
 	defer f.Close()
-	entry := worktreesDir + "\n"
+	entry := claude.WorktreesDir + "\n"
 	if len(data) > 0 && !bytes.HasSuffix(data, []byte("\n")) {
 		entry = "\n" + entry
 	}

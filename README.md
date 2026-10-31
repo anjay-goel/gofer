@@ -174,7 +174,7 @@ gofer init devbox --workdir ~/code
 - **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself. Claude never saves trust for the home folder, so run agents in a folder inside it.
 - **Questions:** gofer turns off question dialogs and plan mode for its agents, so they can't hang overnight. They ask in plain text and end their turn, and `gofer send` answers.
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
-- **Desktop alerts:** `--notify` names the agent, its state and the next command. It uses terminal escape codes (OSC 9 and a bell) where stdout is a terminal, plus `osascript` or `notify-send` when they exist, so some terminals show it twice. With none of these, it skips quietly.
+- **Desktop alerts:** `--notify` names the agent, its state and the next command. It uses `osascript` or `notify-send` when they work, and otherwise terminal escape codes (OSC 9 and a bell) where stdout is a terminal. With none of these, it skips quietly.
 - **Finished agents:** `rm --finished` keeps failed and cut-short agents, because they may still need waking.
 - **Scheduled work:** an agent with a `/loop` or wakeup pending counts as running, so `gofer wait` keeps waiting. Use `--timeout` to stop sooner.
 - **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.

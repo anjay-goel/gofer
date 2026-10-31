@@ -42,26 +42,13 @@ func TestPhase(t *testing.T) {
 	}
 }
 
-func TestParseEntriesQueuedInput(t *testing.T) {
-	cases := []struct {
-		line string
-		want int
-	}{
-		{`{"type":"attachment","attachment":{"type":"queued_command","commandMode":"prompt","isMeta":true,"prompt":"hello"}}`, 1},
-		{`{"type":"attachment","attachment":{"type":"queued_command","commandMode":"task-notification","prompt":"done"}}`, 0},
-	}
-	for _, tc := range cases {
-		if got := parseEntries([]byte(tc.line)); len(got) != tc.want {
-			t.Errorf("%s: got %+v", tc.line, got)
-		}
-	}
-}
-
-func TestParseEntriesCleanText(t *testing.T) {
+func TestParseEntries(t *testing.T) {
 	cases := []struct {
 		line string
 		want []core.LogLine
 	}{
+		{`{"type":"attachment","attachment":{"type":"queued_command","commandMode":"prompt","isMeta":true,"prompt":"hello"}}`, []core.LogLine{{Role: "user", Text: "hello"}}},
+		{`{"type":"attachment","attachment":{"type":"queued_command","commandMode":"task-notification","prompt":"done"}}`, nil},
 		{`{"type":"user","message":{"content":"<task-notification>x</task-notification>"}}`, nil},
 		{`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls","description":"list"}}]}}`, []core.LogLine{{Role: "tool", Text: "Bash  ls"}}},
 		{`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__metabase__execute_sql","input":{"database_id":3,"sql":"SELECT 1"}}]}}`, []core.LogLine{{Role: "tool", Text: "metabase execute_sql  SELECT 1"}}},
@@ -154,7 +141,7 @@ func TestHookSettingsDenyDialogs(t *testing.T) {
 }
 
 func TestSummaryPicksAUsefulFirstLine(t *testing.T) {
-	long := strings.Repeat("é", summaryLimit)
+	long := "a" + strings.Repeat("é", summaryLimit)
 	cases := []struct {
 		reply string
 		want  string
@@ -168,11 +155,11 @@ func TestSummaryPicksAUsefulFirstLine(t *testing.T) {
 		{"", ""},
 	}
 	for _, tc := range cases {
-		if got := Summary(tc.reply); got != tc.want {
+		if got := summary(tc.reply); got != tc.want {
 			t.Errorf("%q: got %q", tc.reply, got)
 		}
 	}
-	if got := Summary(long); len(got) > summaryLimit+len("…") || !utf8.ValidString(got) {
+	if got := summary(long); len(got) > summaryLimit+len("…") || !utf8.ValidString(got) {
 		t.Fatalf("not capped: %d bytes", len(got))
 	}
 }
@@ -217,12 +204,6 @@ func TestTranscriptReadsPickUpWhereTheyStopped(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := d.LastReply("s"); got != "one" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestClipKeepsWholeCharacters(t *testing.T) {
-	if got := clip("aé", 2); got != "a…" {
 		t.Fatalf("got %q", got)
 	}
 }

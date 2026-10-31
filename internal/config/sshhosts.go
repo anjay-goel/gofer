@@ -16,7 +16,7 @@ type Candidate struct {
 	Source string
 }
 
-func SSHHosts() []string {
+func sshHosts() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
@@ -87,7 +87,7 @@ func tailscaleBin() string {
 	return ""
 }
 
-func TailscalePeers() []string {
+func tailscalePeers() []string {
 	bin := tailscaleBin()
 	if bin == "" {
 		return nil
@@ -125,12 +125,12 @@ var gitHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.o
 
 func Candidates() []Candidate {
 	var out []Candidate
-	for _, h := range SSHHosts() {
+	for _, h := range sshHosts() {
 		if !slices.Contains(gitHosts, strings.ToLower(h)) {
 			out = append(out, Candidate{Host: h, Source: "ssh config"})
 		}
 	}
-	for _, h := range TailscalePeers() {
+	for _, h := range tailscalePeers() {
 		out = append(out, Candidate{Host: h, Source: "tailscale"})
 	}
 	return out

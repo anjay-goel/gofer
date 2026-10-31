@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	queryLimit = 30 * time.Second
-	spawnLimit = 90 * time.Second
+	queryLimit        = 30 * time.Second
+	spawnLimit        = 90 * time.Second
+	subscriptionLogin = "claude.ai"
 )
 
 var ErrUnconfirmed = errors.New("start not confirmed")
@@ -223,14 +224,6 @@ func (l Launch) args() []string {
 	return args
 }
 
-type StartOptions struct {
-	Launch
-	Dir    string
-	Prompt string
-}
-
-const subscriptionLogin = "claude.ai"
-
 var (
 	bgRe   = regexp.MustCompile(`backgrounded\s+·\s+([0-9a-f]{8})`)
 	copyRe = regexp.MustCompile(`copy(?: of that conversation)? as ([0-9a-f]{8})`)
@@ -251,8 +244,8 @@ func (d *Driver) spawn(dir string, args []string) (job, stderr string, err error
 	return m[1], stderr, nil
 }
 
-func (d *Driver) Start(o StartOptions) (string, error) {
-	job, _, err := d.spawn(o.Dir, append(o.Launch.args(), "--", o.Prompt))
+func (d *Driver) Start(dir, prompt string, l Launch) (string, error) {
+	job, _, err := d.spawn(dir, append(l.args(), "--", prompt))
 	return job, err
 }
 

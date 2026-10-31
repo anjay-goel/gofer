@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	Schema       = 1
+	schema       = 1
 	deliveryLock = "delivery.lock"
 )
 
@@ -94,7 +94,7 @@ func (s *Store) Create(a Agent) (release func(), err error) {
 		return nil, err
 	}
 	defer os.RemoveAll(staged)
-	a.Schema = Schema
+	a.Schema = schema
 	if err := writeRecord(staged, a); err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (s *Store) Load(name string) (Agent, error) {
 	if err := json.Unmarshal(data, &a); err != nil {
 		return a, Unreadable{name, fmt.Errorf("can't read %s: %w", path, err)}
 	}
-	if a.Schema > Schema {
+	if a.Schema > schema {
 		return a, Unreadable{name, fmt.Errorf("can't read %s: it uses state schema %d, newer than this gofer supports", path, a.Schema)}
 	}
 	return a, nil

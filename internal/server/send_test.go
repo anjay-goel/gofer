@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -60,6 +61,14 @@ func (f fixture) trust(t *testing.T, dir string) {
 	}})
 	must(t, err)
 	f.write(t, ".claude.json", string(data))
+}
+
+func (f fixture) trustedDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(f.home, "work")
+	must(t, os.Mkdir(dir, 0o755))
+	f.trust(t, dir)
+	return dir
 }
 
 func (f fixture) calls(t *testing.T) string {
@@ -145,24 +154,17 @@ func TestSendDecisions(t *testing.T) {
 				dir = f.home
 			}
 			f.create(t, store.Agent{Name: "a", SessionID: sessionID, Dir: dir, Socket: socket, Bypass: tc.bypass})
-			address := tc.address
-			if address == "" {
-				address = "a"
-			}
-			result, err := f.srv.send(core.SendParams{Name: address, Message: "hello"})
+			result, err := f.srv.send(core.SendParams{Name: cmp.Or(tc.address, "a"), Message: "hello"})
 			if !strings.Contains(f.calls(t), tc.wantCall) {
 				t.Fatalf("calls = %q, want %q", f.calls(t), tc.wantCall)
 			}
 			if tc.wantNoCall != "" && strings.Contains(f.calls(t), tc.wantNoCall) {
 				t.Fatalf("calls = %q, want no %q", f.calls(t), tc.wantNoCall)
 			}
+			checkErr(t, err, tc.wantErr)
 			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want %q", err, tc.wantErr)
-				}
 				return
 			}
-			must(t, err)
 			if result.Action != tc.action || result.Delivered == tc.wantUndecided {
 				t.Fatalf("result = %+v, want %s, undecided %v", result, tc.action, tc.wantUndecided)
 			}
@@ -199,5 +201,14 @@ func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func checkErr(t *testing.T, err error, want string) {
+	t.Helper()
+	if want == "" {
+		must(t, err)
+	} else if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 }

@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -19,9 +17,7 @@ var confirmWindow = 15 * time.Second
 var tokenTag = regexp.MustCompile(`\[gofer-[0-9a-f]{10}\]`)
 
 func newToken() string {
-	b := make([]byte, 5)
-	rand.Read(b)
-	return "gofer-" + hex.EncodeToString(b)
+	return "gofer-" + core.RandomHex(5)
 }
 
 func tagged(message, token string) string {

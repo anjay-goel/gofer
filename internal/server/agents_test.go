@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/anjay-goel/gofer/internal/core"
+	"github.com/anjay-goel/gofer/internal/driver/claude"
 	"github.com/anjay-goel/gofer/internal/store"
 )
 
@@ -285,11 +287,7 @@ func TestRunOutcomes(t *testing.T) {
 			f.trust(t, repo)
 			gitIn(t, repo, "update-ref", core.HandoffRef("r"), head)
 			_, err := f.srv.run(core.RunParams{RequestID: "r", Name: "job", Repo: "api", Root: "code", Prompt: "p", Base: head})
-			if tc.wantErr == "" {
-				must(t, err)
-			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("error = %v, want %q", err, tc.wantErr)
-			}
+			checkErr(t, err, tc.wantErr)
 			agent, loadErr := f.srv.Store.Load("job")
 			if (loadErr == nil) != tc.wantRecord {
 				t.Fatalf("record: %v, want %v", loadErr, tc.wantRecord)
@@ -512,9 +510,7 @@ func TestRepeatedRunReturnsTheSameAgent(t *testing.T) {
 	startWindow, linkWindow = time.Second, time.Millisecond
 	f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","state":"working"}]`)
 	f.write(t, "bg.out", "backgrounded · cccccccc · x")
-	dir := filepath.Join(f.home, "work")
-	must(t, os.Mkdir(dir, 0o755))
-	f.trust(t, dir)
+	dir := f.trustedDir(t)
 	params := core.RunParams{RequestID: "r", Repo: dir, Prompt: "fix the tests"}
 	views := make([]core.View, 3)
 	var group sync.WaitGroup
@@ -549,9 +545,7 @@ func TestLargePromptReachesTheAgentThroughAFile(t *testing.T) {
 	startWindow, linkWindow = time.Second, time.Millisecond
 	f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","state":"working"}]`)
 	f.write(t, "bg.out", "backgrounded · cccccccc · x")
-	dir := filepath.Join(f.home, "work")
-	must(t, os.Mkdir(dir, 0o755))
-	f.trust(t, dir)
+	dir := f.trustedDir(t)
 	doc := strings.Repeat("x", argLimit)
 	_, err := f.srv.run(core.RunParams{RequestID: "r", Name: "job", Repo: dir, Prompt: "fix it", Doc: doc})
 	must(t, err)
@@ -585,9 +579,7 @@ func TestUnreadableAgentIsReported(t *testing.T) {
 	if len(views) != 1 || views[0].Name != "bad" || views[0].State != core.StateUnknown || !strings.Contains(views[0].Detail, "agent.json") {
 		t.Fatalf("views = %+v", views)
 	}
-	dir := filepath.Join(f.home, "work")
-	must(t, os.Mkdir(dir, 0o755))
-	f.trust(t, dir)
+	dir := f.trustedDir(t)
 	if _, err := f.srv.run(core.RunParams{RequestID: "r", Name: "job", Repo: dir, Prompt: "p"}); err == nil || !strings.Contains(err.Error(), "gofer rm bad --force") {
 		t.Fatalf("error = %v", err)
 	}
@@ -605,9 +597,7 @@ func TestRunReportsALinkThatAppearsLate(t *testing.T) {
 	startWindow, linkWindow = 5*time.Second, 5*time.Second
 	f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","state":"working"}]`)
 	f.write(t, "bg.out", "backgrounded · cccccccc · x")
-	dir := filepath.Join(f.home, "work")
-	must(t, os.Mkdir(dir, 0o755))
-	f.trust(t, dir)
+	dir := f.trustedDir(t)
 	must(t, os.MkdirAll(filepath.Join(f.home, ".claude", "sessions"), 0o755))
 	time.AfterFunc(700*time.Millisecond, func() {
 		f.write(t, ".claude/sessions/42.json", `{"bridgeSessionId":"session_x"}`)
@@ -649,6 +639,10 @@ func TestStop(t *testing.T) {
 				t.Fatalf("events = %+v", events)
 			}
 		})
+	}
+	f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","status":"busy"}]`)
+	if _, err := f.srv.stop(core.NameParams{}); err == nil || strings.Contains(f.calls(t), "stop ") {
+		t.Fatalf("an empty name matched a session: %v, calls = %q", err, f.calls(t))
 	}
 }
 
@@ -746,16 +740,8 @@ func TestRemove(t *testing.T) {
 				agent.Repo, agent.Branch, agent.Dir = tc.repo, "agent/a", filepath.Join(tc.repo, "wt")
 			}
 			f.create(t, agent)
-			address := tc.address
-			if address == "" {
-				address = "a"
-			}
-			_, err := f.srv.remove(core.RemoveParams{Name: address, Force: tc.force})
-			if tc.wantErr == "" {
-				must(t, err)
-			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("error = %v, want %q", err, tc.wantErr)
-			}
+			_, err := f.srv.remove(core.RemoveParams{Name: cmp.Or(tc.address, "a"), Force: tc.force})
+			checkErr(t, err, tc.wantErr)
 			if _, err := f.srv.Store.Load("a"); (err == nil) != tc.wantRecord {
 				t.Fatalf("record: %v, want %v", err, tc.wantRecord)
 			}
@@ -798,11 +784,7 @@ func TestRemoveWorktreeGitWouldRefuse(t *testing.T) {
 			tc.setup(t, f, agent.Dir)
 			head := gitIn(t, agent.Dir, "rev-parse", "HEAD")
 			_, err := f.srv.remove(core.RemoveParams{Name: "a", Force: tc.force, FetchedHead: head})
-			if tc.wantErr == "" {
-				must(t, err)
-			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("error = %v, want %q", err, tc.wantErr)
-			}
+			checkErr(t, err, tc.wantErr)
 			failed := tc.wantErr != ""
 			if pathExists(agent.Dir) != failed || f.srv.Store.Exists("a") != failed || strings.Contains(f.calls(t), "rm cccccccc") == failed {
 				t.Fatalf("calls = %q, worktree or record in the wrong state", f.calls(t))
@@ -830,23 +812,17 @@ func TestRemoveWaitsForADeliveryInProgress(t *testing.T) {
 	must(t, <-done)
 }
 
-func TestEmptyNameMatchesNoSession(t *testing.T) {
-	f := newFixture(t, `[{"id":"cccccccc","sessionId":"%s","status":"busy"}]`)
-	if _, err := f.srv.stop(core.NameParams{}); err == nil || strings.Contains(f.calls(t), "stop ") {
-		t.Fatalf("error = %v, calls = %q", err, f.calls(t))
-	}
-}
-
 func TestExcludeWorktrees(t *testing.T) {
+	entry := claude.WorktreesDir + "\n"
 	cases := []struct {
 		name string
 		in   string
 		want string
 	}{
-		{"empty", "", worktreesDir + "\n"},
-		{"no final newline", "build", "build\n" + worktreesDir + "\n"},
-		{"already there", worktreesDir + "\nbuild\n", worktreesDir + "\nbuild\n"},
-		{"glued to another pattern", "build" + worktreesDir + "\n", "build" + worktreesDir + "\n" + worktreesDir + "\n"},
+		{"empty", "", entry},
+		{"no final newline", "build", "build\n" + entry},
+		{"already there", entry + "build\n", entry + "build\n"},
+		{"glued to another pattern", "build" + entry, "build" + entry + entry},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -923,13 +899,7 @@ func TestResolve(t *testing.T) {
 			f := newFixture(t, tc.agents)
 			f.create(t, store.Agent{Name: "a", SessionID: tc.session, Dir: f.home})
 			r, err := f.srv.resolve(core.NameParams{Name: "a"})
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want %q", err, tc.wantErr)
-				}
-				return
-			}
-			must(t, err)
+			checkErr(t, err, tc.wantErr)
 			if r.Job != tc.wantJob {
 				t.Fatalf("result = %+v", r)
 			}

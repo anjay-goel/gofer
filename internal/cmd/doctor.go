@@ -83,3 +83,42 @@ func (a *app) smoke() error {
 	fmt.Println(checkMark("ok"), "live test: start, wait, send and reply")
 	return nil
 }
+
+func printCheck(c core.Check) {
+	kind := "ok"
+	if !c.OK {
+		kind = "FAIL"
+	}
+	fmt.Printf("%s %s", checkMark(kind), c.Name)
+	if c.Detail != "" {
+		fmt.Printf(": %s", c.Detail)
+	}
+	fmt.Println()
+}
+
+func printChecks(checks []core.Check) bool {
+	for _, c := range checks {
+		printCheck(c)
+	}
+	return !slices.ContainsFunc(checks, failed)
+}
+
+func failed(c core.Check) bool {
+	return !c.OK
+}
+
+func printCheckSummary(checks []core.Check) bool {
+	if !styled {
+		return printChecks(checks)
+	}
+	passed := 0
+	for _, c := range checks {
+		if c.OK {
+			passed++
+		} else {
+			printCheck(c)
+		}
+	}
+	done("%d checks passed", passed)
+	return !slices.ContainsFunc(checks, failed)
+}

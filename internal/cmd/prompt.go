@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"cmp"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ const (
 var (
 	errCancelled  = exitCode{130, ""}
 	spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	stdin         = bufio.NewReader(os.Stdin)
 )
 
 type choice struct {
@@ -32,8 +34,17 @@ type choice struct {
 	note  string
 }
 
+func isTTY() bool {
+	return isTerminal(os.Stdin)
+}
+
 func interactive() bool {
 	return styled && isTTY()
+}
+
+func readLine() string {
+	line, _ := stdin.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
 func rawTerminal() (func(), error) {

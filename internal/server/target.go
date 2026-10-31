@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 	"time"
 
@@ -223,4 +224,27 @@ func (s *Server) locateLocked(name string) (target, func(), error) {
 		return t, nil, err
 	}
 	return t, unlock, nil
+}
+
+func (s *Server) resolve(p core.NameParams) (core.ResolveResult, error) {
+	t, err := s.locate(p.Name)
+	if err != nil {
+		return core.ResolveResult{}, err
+	}
+	if err := t.requireSession(p.Name); err != nil {
+		return core.ResolveResult{}, err
+	}
+	r := core.ResolveResult{Job: t.sess.Job, Dir: t.agent.Dir}
+	switch {
+	case !t.listed:
+		r.Note = "claude no longer lists this session, so there's nothing to attach to. Wake it with gofer send"
+	case t.sess.Job == "":
+		r.Note = "this session was not started with claude --bg, so it can't be attached. Follow it on claude.ai/code, or message it with gofer send"
+	}
+	if t.listed && t.sess.Cwd != "" {
+		if _, err := os.Stat(t.sess.Cwd); err == nil {
+			r.Dir = t.sess.Cwd
+		}
+	}
+	return r, nil
 }

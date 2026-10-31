@@ -12,6 +12,8 @@ import (
 )
 
 const (
+	WorktreesDir = ".claude/worktrees/"
+
 	lockWait  = 5 * time.Second
 	lockStale = 10 * time.Second
 )
@@ -24,6 +26,14 @@ func (d *Driver) globalConfig() string {
 
 func (d *Driver) userSettings() string {
 	return filepath.Join(d.home, ".claude", "settings.json")
+}
+
+func SkillPath(name string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".claude", "skills", name, "SKILL.md"), nil
 }
 
 func lockConfig(path string) (func(), error) {

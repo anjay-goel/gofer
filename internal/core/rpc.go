@@ -23,11 +23,13 @@ type Response struct {
 	Result json.RawMessage `json:"result,omitempty"`
 }
 
-func NewRequestID() string {
-	b := make([]byte, 16)
+func RandomHex(size int) string {
+	b := make([]byte, size)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+func NewRequestID() string { return RandomHex(16) }
 
 type Method[P, R any] string
 

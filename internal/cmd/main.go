@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/anjay-goel/gofer/internal/config"
+	"github.com/anjay-goel/gofer/internal/core"
 	"github.com/anjay-goel/gofer/internal/server"
 	"github.com/anjay-goel/gofer/internal/transport"
 )
@@ -200,6 +201,12 @@ func (a *app) withClient(fn func([]string) error, args []string) error {
 	a.cfg, a.host, a.hostCfg = cfg, host, hostCfg
 	a.client = a.newClient(host)
 	return fn(args)
+}
+
+func spinCall[P, R any](c *transport.Client, label string, method core.Method[P, R], params P) (R, error) {
+	stop := spinning(label)
+	defer stop()
+	return transport.Call(c, method, params)
 }
 
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {

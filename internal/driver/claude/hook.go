@@ -60,7 +60,7 @@ func ParseHook(r io.Reader) (Hook, error) {
 	}
 	switch in.Event {
 	case "Stop":
-		hook.Summary = Summary(in.LastReply)
+		hook.Summary = summary(in.LastReply)
 	case "StopFailure":
 		hook.Failure = failure(in.Error, in.ErrorDetails)
 	}

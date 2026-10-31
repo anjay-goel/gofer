@@ -12,12 +12,10 @@ import (
 	"github.com/anjay-goel/gofer/internal/proc"
 )
 
-const systemdLimit = 30 * time.Second
-
-var systemdRuntime = "/run/systemd/system"
+const loginctlLimit = 30 * time.Second
 
 func systemdBooted() bool {
-	_, err := os.Stat(systemdRuntime)
+	_, err := os.Stat("/run/systemd/system")
 	return err == nil
 }
 
@@ -25,8 +23,8 @@ func (s *Server) dataDir() string {
 	return filepath.Join(s.Home, core.InstallDir)
 }
 
-func systemd(name string, args ...string) proc.Cmd {
-	return proc.Cmd{Name: name, Args: args, Limit: systemdLimit}
+func loginctl(args ...string) (string, error) {
+	return proc.Cmd{Name: "loginctl", Args: args, Limit: loginctlLimit}.Output()
 }
 
 func (s *Server) linger(struct{}) (core.NoteResult, error) {
@@ -34,7 +32,7 @@ func (s *Server) linger(struct{}) (core.NoteResult, error) {
 	if !systemdBooted() || lingering() {
 		return result, nil
 	}
-	if _, err := systemd("loginctl", "enable-linger").Output(); err != nil {
+	if _, err := loginctl("enable-linger"); err != nil {
 		result.Note = "Lingering is off and needs an admin, so agents stop at logout: " + err.Error()
 		return result, nil
 	}
@@ -43,7 +41,7 @@ func (s *Server) linger(struct{}) (core.NoteResult, error) {
 }
 
 func lingering() bool {
-	out, err := systemd("loginctl", "show-user", os.Getenv("USER"), "-p", "Linger").Output()
+	out, err := loginctl("show-user", os.Getenv("USER"), "-p", "Linger")
 	return err == nil && strings.Contains(out, "Linger=yes")
 }
 

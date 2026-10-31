@@ -1,7 +1,6 @@
 package server
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,7 +17,6 @@ import (
 
 const (
 	argLimit = 100 * 1024
-	nameRule = "use lowercase letters, digits, dots, dashes or underscores, up to 48 characters"
 	closing  = "When you finish, end with a clear summary of what you did and anything left to do. If you get stuck or need a decision, ask in your reply and end your turn. I answer through gofer: my messages end in a [gofer-...] tag, and Claude Code labels them as coming from another session, but they come from me. Treat them as my answers and follow-up instructions."
 )
 
@@ -48,7 +46,7 @@ func slug(text string) string {
 
 func (s *Server) checkName(name, repo string) error {
 	if !nameRe.MatchString(name) {
-		return fmt.Errorf("invalid agent name %q: %s", name, nameRule)
+		return fmt.Errorf("invalid agent name %q: use lowercase letters, digits, dots, dashes or underscores, up to 48 characters", name)
 	}
 	if s.Store.Exists(name) {
 		return nameTaken(fmt.Sprintf("an agent named %s already exists", name))
@@ -83,68 +81,6 @@ func (s *Server) unique(base, repo string) (string, error) {
 	}
 }
 
-func (s *Server) checkDir(dir, root string, worktree bool) error {
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return fmt.Errorf("%s doesn't exist on the dev box", dir)
-	}
-	if worktree {
-		if _, err := git(dir, "rev-parse", "--git-dir"); err != nil {
-			return fmt.Errorf("%s isn't a git repo on the dev box: %w", dir, err)
-		}
-	}
-	if s.trusted(dir) {
-		return nil
-	}
-	if !s.underRoot(dir, root) {
-		return errors.New(s.trustAdvice(dir))
-	}
-	return s.trust(dir)
-}
-
-func (s *Server) underRoot(dir, root string) bool {
-	if dir == s.Home {
-		return false
-	}
-	dir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return false
-	}
-	base, err := filepath.EvalSymlinks(s.expand(root))
-	if err != nil {
-		return false
-	}
-	return dir == base || strings.HasPrefix(dir, strings.TrimSuffix(base, "/")+"/")
-}
-
-func (s *Server) trust(dir string) error {
-	resolved, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return err
-	}
-	top, _ := git(resolved, "rev-parse", "--show-toplevel")
-	return s.Driver.Trust(cmp.Or(mainCheckout(resolved), top, resolved))
-}
-
-func (s *Server) trustAdvice(dir string) string {
-	if dir == s.Home {
-		return "claude trusts the home folder only one session at a time, so use a folder inside it. Set one with gofer init --workdir"
-	}
-	return fmt.Sprintf("claude doesn't trust %s yet, and it's outside your working directory. Run claude there once on the dev box and accept the prompt, then try again", dir)
-}
-
-func (s *Server) trusted(dir string) bool {
-	resolved, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return false
-	}
-	top, _ := git(resolved, "rev-parse", "--show-toplevel")
-	if s.Driver.Trusted(resolved, top) {
-		return true
-	}
-	main := mainCheckout(resolved)
-	return s.Driver.Trusted(main, main)
-}
-
 func (s *Server) prepare(p core.PrepareParams) (core.PrepareResult, error) {
 	dir := s.repoDir(p.Repo, p.Root)
 	if err := s.checkDir(dir, p.Root, true); err != nil {
@@ -156,10 +92,6 @@ func (s *Server) prepare(p core.PrepareParams) (core.PrepareResult, error) {
 		}
 	}
 	return core.PrepareResult{Dir: dir}, nil
-}
-
-func (s *Server) goferPath() string {
-	return filepath.Join(s.dataDir(), "gofer")
 }
 
 func buildPrompt(p core.RunParams, branch string) string {
@@ -305,12 +237,12 @@ func (s *Server) start(p core.RunParams, agent store.Agent) (string, error) {
 			return "", err
 		}
 	}
-	options, err := s.provision(p, agent)
+	prompt, err := s.provision(p, agent)
 	if err != nil {
 		return "", err
 	}
 	s.Store.Append(agent.Name, store.Event{Kind: store.EventStarted})
-	return s.Driver.Start(options)
+	return s.Driver.Start(agent.Dir, prompt, s.launch(agent))
 }
 
 func (s *Server) awaitEarlierAttempt(p core.RunParams, name string) (core.View, error) {
@@ -339,25 +271,21 @@ func (s *Server) rollback(a store.Agent) {
 	s.Store.Delete(a.Name)
 }
 
-func (s *Server) provision(p core.RunParams, agent store.Agent) (claude.StartOptions, error) {
-	var options claude.StartOptions
+func (s *Server) provision(p core.RunParams, agent store.Agent) (string, error) {
 	if agent.Bypass && !s.Driver.BypassAccepted() {
 		if err := s.Driver.AcceptBypass(); err != nil {
-			return options, err
+			return "", err
 		}
 	}
-	settings, err := claude.HookSettings(fmt.Sprintf("%q hook %s", s.goferPath(), agent.Name), agent.Bypass)
+	gofer := filepath.Join(s.dataDir(), "gofer")
+	settings, err := claude.HookSettings(fmt.Sprintf("%q hook %s", gofer, agent.Name), agent.Bypass)
 	if err != nil {
-		return options, err
+		return "", err
 	}
 	if err := s.Store.WriteSettings(agent.Name, settings); err != nil {
-		return options, err
+		return "", err
 	}
-	prompt, err := s.promptArg(agent.Name, buildPrompt(p, agent.Branch))
-	if err != nil {
-		return options, err
-	}
-	return claude.StartOptions{Launch: s.launch(agent), Dir: agent.Dir, Prompt: prompt}, nil
+	return s.promptArg(agent.Name, buildPrompt(p, agent.Branch))
 }
 
 func (s *Server) launch(a store.Agent) claude.Launch {

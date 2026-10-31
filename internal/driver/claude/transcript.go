@@ -116,7 +116,7 @@ func (d *Driver) LastReply(sessionID string) string {
 		for j := len(entries) - 1; j >= 0; j-- {
 			switch entries[j].Role {
 			case "assistant":
-				return Summary(entries[j].Text)
+				return summary(entries[j].Text)
 			case "user":
 				return ""
 			}
@@ -125,7 +125,7 @@ func (d *Driver) LastReply(sessionID string) string {
 	return ""
 }
 
-func Summary(reply string) string {
+func summary(reply string) string {
 	heading := ""
 	for _, raw := range strings.Split(reply, "\n") {
 		line := core.OneLine(strings.ReplaceAll(raw, "**", ""))

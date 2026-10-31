@@ -1,13 +1,14 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/anjay-goel/gofer/internal/core"
 )
 
 type Host struct {
@@ -21,7 +22,7 @@ type Config struct {
 	Hosts       map[string]Host `json:"hosts"`
 }
 
-func Path() (string, error) {
+func configPath() (string, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -35,7 +36,7 @@ func Path() (string, error) {
 
 func Load() (*Config, error) {
 	cfg := &Config{Hosts: map[string]Host{}}
-	path, err := Path()
+	path, err := configPath()
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +58,9 @@ func Load() (*Config, error) {
 
 func (c *Config) Save() error {
 	if c.Client == "" {
-		b := make([]byte, 6)
-		rand.Read(b)
-		c.Client = hex.EncodeToString(b)
+		c.Client = core.RandomHex(6)
 	}
-	path, err := Path()
+	path, err := configPath()
 	if err != nil {
 		return err
 	}
@@ -80,17 +79,11 @@ func (c *Config) Save() error {
 }
 
 func Requested(override string) string {
-	if override != "" {
-		return override
-	}
-	return os.Getenv("GOFER_HOST")
+	return cmp.Or(override, os.Getenv("GOFER_HOST"))
 }
 
 func (c *Config) Select(override string) (string, Host, error) {
-	name := Requested(override)
-	if name == "" {
-		name = c.DefaultHost
-	}
+	name := cmp.Or(Requested(override), c.DefaultHost)
 	if name == "" {
 		return "", Host{}, errors.New("no dev box set up. Run gofer init")
 	}

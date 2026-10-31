@@ -54,12 +54,12 @@ func (e NetworkError) Retryable() bool {
 	return true
 }
 
-type RemoteError struct {
+type remoteError struct {
 	Code string
 	Msg  string
 }
 
-func (e RemoteError) Error() string { return e.Msg }
+func (e remoteError) Error() string { return e.Msg }
 
 type Client struct {
 	Host    string
@@ -116,20 +116,20 @@ func (c *Client) Reachable() error {
 	return err
 }
 
-func (c *Client) Interactive(script string) error {
-	cmd := exec.Command("ssh", "-t", c.Host, Remote(script))
+func (c *Client) attached(script string, flags ...string) error {
+	cmd := exec.Command("ssh", append(flags, c.Host, Remote(script))...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
+func (c *Client) Interactive(script string) error {
+	return c.attached(script, "-t")
+}
+
 func (c *Client) LineMode(script string) error {
-	cmd := exec.Command("ssh", c.Host, Remote(script))
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return c.attached(script)
 }
 
 func (c *Client) Copy(source, dest string) error {
@@ -146,7 +146,7 @@ func Call[P, R any](c *Client, method core.Method[P, R], params P) (R, error) {
 func CallWithin[P, R any](c *Client, limit time.Duration, method core.Method[P, R], params P) (R, error) {
 	var result R
 	err := c.call(limit, string(method), params, &result)
-	var remote RemoteError
+	var remote remoteError
 	if errors.Is(err, errBroken) || (errors.As(err, &remote) && remote.Code == core.CodeVersionMismatch) {
 		if up := c.Upgrade(); up != nil {
 			return result, fmt.Errorf("couldn't update gofer on the dev box: %w", up)
@@ -175,7 +175,7 @@ func (c *Client) call(limit time.Duration, method string, params, result any) er
 			return err
 		}
 		if resp.Error != "" {
-			return RemoteError{Code: resp.Code, Msg: resp.Error}
+			return remoteError{Code: resp.Code, Msg: resp.Error}
 		}
 		if len(resp.Result) > 0 {
 			return json.Unmarshal(resp.Result, result)

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/anjay-goel/gofer/internal/config"
 	"github.com/anjay-goel/gofer/internal/core"
+	"github.com/anjay-goel/gofer/internal/driver/claude"
 	"github.com/anjay-goel/gofer/internal/transport"
 	"github.com/anjay-goel/gofer/skill"
 )
@@ -201,7 +203,7 @@ echo 'GOFER-RPC {"result":{"name":"job"}}'
 
 func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	path, err := skillPath("gofer")
+	path, err := claude.SkillPath("gofer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +217,7 @@ func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range skill.All {
-		path, err := skillPath(s.Name)
+		path, err := claude.SkillPath(s.Name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -303,6 +305,55 @@ func TestAlertsCarryOneCleanLine(t *testing.T) {
 	}
 }
 
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	stdout := os.Stdout
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = write
+	defer func() { os.Stdout = stdout }()
+	fn()
+	write.Close()
+	printed, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(printed)
+}
+
+func TestAlertTakesOneRoute(t *testing.T) {
+	settled := core.WaitResult{Views: []core.View{{Name: "a", State: core.StateIdle, Settled: true}}}
+	cases := []struct {
+		name         string
+		command      string
+		inTerminal   bool
+		wantTerminal bool
+	}{
+		{"the OS command wins", "exit 0", true, false},
+		{"a failing OS command falls back", "exit 1", true, true},
+		{"no OS command falls back", "", true, true},
+		{"JSON output stays clean", "", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("PATH", dir)
+			if tc.command != "" {
+				name, _ := alertCommand(runtime.GOOS, "", "")
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+tc.command+"\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			printed := captureStdout(t, func() { raiseAlerts(settled, tc.inTerminal) })
+			if strings.Contains(printed, osc+"9;") != tc.wantTerminal {
+				t.Fatalf("printed %q", printed)
+			}
+		})
+	}
+}
+
 func TestCompletion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -366,18 +417,9 @@ esac
 	t.Setenv("FAKE_DIR", dir)
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	a := &app{host: "box", cfg: &config.Config{}, client: &transport.Client{Host: "box", Version: "v"}}
-	stdout := os.Stdout
-	read, write, err := os.Pipe()
-	must(err)
-	os.Stdout = write
-	err = a.rm([]string{"--finished"})
-	os.Stdout = stdout
-	write.Close()
-	must(err)
-	printed, err := io.ReadAll(read)
-	must(err)
+	printed := captureStdout(t, func() { must(a.rm([]string{"--finished"})) })
 	for _, want := range []string{"Removed clean", "Skipped: dirty has uncommitted", "Skipped bad: failed", "Skipped cut: stopped (cut short)"} {
-		if !strings.Contains(string(printed), want) {
+		if !strings.Contains(printed, want) {
 			t.Errorf("missing %q in:\n%s", want, printed)
 		}
 	}

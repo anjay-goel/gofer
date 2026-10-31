@@ -10,6 +10,26 @@ import (
 	"github.com/anjay-goel/gofer/internal/store"
 )
 
+func (s *Server) stop(p core.NameParams) (core.StopResult, error) {
+	t, err := s.locate(p.Name)
+	if err != nil {
+		return core.StopResult{}, err
+	}
+	if t.ended() {
+		return core.StopResult{AlreadyStopped: true}, nil
+	}
+	if t.sess.Job == "" {
+		return core.StopResult{}, fmt.Errorf("%s wasn't started with claude --bg, so stop it where it runs", p.Name)
+	}
+	if err := s.Driver.Stop(t.sess.Job); err != nil {
+		return core.StopResult{}, err
+	}
+	if t.managed() {
+		s.Store.Append(t.agent.Name, store.Event{Kind: store.EventStopped})
+	}
+	return core.StopResult{}, nil
+}
+
 func (s *Server) remove(p core.RemoveParams) (core.RemoveResult, error) {
 	var result core.RemoveResult
 	t, unlock, err := s.locateLocked(p.Name)
