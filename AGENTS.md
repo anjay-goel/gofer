@@ -1,6 +1,6 @@
 # Gofer
 
-A Go CLI that runs Claude Code agents on a dev box from a laptop. Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing how packages fit together.
+A Go CLI that runs Claude Code agents on a dev box from a laptop. Read "How it works" in [README.md](README.md) before changing how packages fit together.
 
 ## Commands
 
@@ -29,9 +29,8 @@ make install
 
 Update these with any change a user or agent would notice:
 
-- `README.md` for commands, flags and limits
+- `README.md` for commands, flags, limits, design and package changes
 - `skill/SKILL.md` for how agents should use gofer
-- `ARCHITECTURE.md` for design and package changes
 
 ## Testing
 

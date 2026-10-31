@@ -93,11 +93,30 @@ If the connection drops during `gofer run`, it retries with the same request ID,
 
 ## How it works
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and code layout. In short:
+```mermaid
+flowchart LR
+    subgraph laptop [Laptop]
+        you[You or your agent] --> client[gofer client]
+    end
+    subgraph box [Dev box]
+        rpc[gofer rpc] --> claude[claude --bg agents]
+        rpc <--> state[(Agent records)]
+        claude -- hooks --> state
+    end
+    client -- "ssh, JSON on stdin" --> rpc
+    client -- "attach, cp, git" --> claude
+    phone[Phone or claude.ai] <-- Remote Control --> claude
+```
 
-The laptop runs the `gofer` client. Each command runs `gofer rpc` on the dev box over SSH, sending JSON on stdin, then exits. `gofer attach` and `gofer cp` then open their own `ssh` or `scp` connection. Updates only travel over connections the laptop opens.
+Gofer adds no server of its own. Each command runs `gofer rpc` on the dev box over SSH, sending JSON on stdin, then exits. Claude Code runs the agents, and gofer keeps a small record of each one in `~/.local/state/gofer/agents/<name>/`. Updates only travel over connections the laptop opens, so results wait on the dev box until you ask for them, and a sleeping laptop loses nothing.
 
-Remote commands run through `sh`, so your login shell on the dev box can be fish or anything else. Hooks passed through `claude --settings` record session IDs, socket paths and turn events in `~/.local/state/gofer/agents/<name>/`. Gofer never changes your Claude settings or SSH config. Messages use the inbox socket Claude gives each session. A prompt, document or waking message over 100 KB goes in the agent's state folder, and the agent is told to read it. Your laptop keeps its hosts in `~/.config/gofer/config.json`.
+- **Hooks:** they go in per session through `claude --settings`, and record session IDs, socket paths and turn events. Gofer never changes your Claude settings or SSH config.
+- **Messages:** they use the inbox socket Claude gives each session. A prompt, document or waking message over 100 KB goes in the agent's state folder, and the agent is told to read it.
+- **Retries:** each `run` carries a request ID, so a retry after a lost connection returns the same agent.
+- **Code handoff:** a `--worktree` run pushes your HEAD to a private ref on the dev box, creates `agent/<name>` from it, then deletes the ref.
+- **Remote shell:** commands run through `sh`, so your login shell on the dev box can be fish or anything else.
+
+The code lives in `internal/`. `cmd`, `config`, `transport`, `terminal` and `payload` run on the laptop, `server` and `store` run on the dev box, and `core` holds the types that cross SSH. Only `driver/claude` knows Claude Code's formats. Your laptop keeps its hosts in `~/.config/gofer/config.json`.
 
 ## Development
 
