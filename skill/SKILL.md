@@ -41,7 +41,7 @@ An agent only knows what you send it. It can't see this conversation or this lap
 
 Agents run in `auto` mode. Only pass `--bypass` when the user asks for it.
 
-`gofer run` refuses a repo Claude doesn't trust yet. Don't start the agent in a parent folder instead, because it would lose the repo's CLAUDE.md and project settings. Stop and give the user this command to run once, then retry: `ssh -t <host> 'cd <path> && claude'`. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
+`gofer run` trusts repos under the configured root by itself. It refuses an untrusted repo outside the root. Don't start the agent in a parent folder instead, because it would lose the repo's CLAUDE.md and project settings. Stop and give the user this command to run once, then retry: `ssh -t <host> 'cd <path> && claude'`. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
 
 ## Waiting
 

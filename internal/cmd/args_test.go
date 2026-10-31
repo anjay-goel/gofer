@@ -28,7 +28,7 @@ func TestExtractHost(t *testing.T) {
 		{"before the command", []string{"--host", "b", "ls"}, []string{"ls"}, "b"},
 		{"after flags", []string{"ls", "--host=b", "--peek"}, []string{"ls", "--peek"}, "b"},
 		{"before a message", []string{"send", "--host", "b", "a", "hi"}, []string{"send", "a", "hi"}, "b"},
-		{"inside a message", []string{"send", "a", "use", "--host", "odin"}, []string{"send", "a", "use", "--host", "odin"}, ""},
+		{"inside a message", []string{"send", "a", "use", "--host", "box"}, []string{"send", "a", "use", "--host", "box"}, ""},
 		{"after a double dash", []string{"run", "api", "--", "--host", "x"}, []string{"run", "api", "--", "--host", "x"}, ""},
 	}
 	for _, tc := range cases {
@@ -104,7 +104,7 @@ func TestMessageWords(t *testing.T) {
 	}{
 		{args: []string{"fix", "it"}, want: "fix it"},
 		{args: []string{"--", "-x", "fails"}, want: "-x fails"},
-		{args: []string{"--", "--host", "odin"}, want: "--host odin"},
+		{args: []string{"--", "--host", "box"}, want: "--host box"},
 		{args: []string{" "}, wantErr: true},
 		{args: []string{"--"}, wantErr: true},
 	}
@@ -167,10 +167,10 @@ func TestLocalGitKeepsStderrOutOfValues(t *testing.T) {
 
 func TestRCName(t *testing.T) {
 	cases := map[string]string{
-		"odin.tail1234.ts.net": "odin",
-		"anjay@Odin":           "odin",
-		"10.0.0.5":             "10.0.0.5",
-		"fd7a:115c::1":         "fd7a-115c--1",
+		"box.tail1234.ts.net": "box",
+		"you@Box":             "box",
+		"10.0.0.5":            "10.0.0.5",
+		"fd7a:115c::1":        "fd7a-115c--1",
 	}
 	for host, want := range cases {
 		if got := rcName(host); got != want {

@@ -167,7 +167,7 @@ func (d *Driver) Record(pid int) (Record, error) {
 }
 
 func (d *Driver) Trusted(dir, top string) bool {
-	data, err := os.ReadFile(filepath.Join(d.home, ".claude.json"))
+	data, err := os.ReadFile(d.globalConfig())
 	if err != nil {
 		return false
 	}
@@ -190,11 +190,12 @@ func (d *Driver) Trusted(dir, top string) bool {
 }
 
 type Launch struct {
-	Name     string
-	Bypass   bool
-	Model    string
-	Effort   string
-	Settings string
+	Name          string
+	Bypass        bool
+	Model         string
+	Effort        string
+	Settings      string
+	RemoteControl bool
 }
 
 func (l Launch) args() []string {
@@ -209,6 +210,9 @@ func (l Launch) args() []string {
 	if l.Effort != "" {
 		args = append(args, "--effort", l.Effort)
 	}
+	if l.RemoteControl {
+		args = append(args, "--remote-control")
+	}
 	return args
 }
 
@@ -217,6 +221,8 @@ type StartOptions struct {
 	Dir    string
 	Prompt string
 }
+
+const subscriptionLogin = "claude.ai"
 
 var (
 	bgRe   = regexp.MustCompile(`backgrounded\s+·\s+([0-9a-f]{8})`)
@@ -301,6 +307,11 @@ func Post(socket, text string) error {
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	_, err = conn.Write(append(line, '\n'))
 	return err
+}
+
+func (d *Driver) CanRemoteControl() bool {
+	loggedIn, method := d.LoggedIn()
+	return loggedIn && method == subscriptionLogin
 }
 
 func (d *Driver) LoggedIn() (bool, string) {

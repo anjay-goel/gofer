@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -82,7 +83,7 @@ func (s *Server) unique(base, repo string) (string, error) {
 	}
 }
 
-func (s *Server) checkDir(dir string, worktree bool) error {
+func (s *Server) checkDir(dir, root string, worktree bool) error {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return fmt.Errorf("%s doesn't exist on the dev box", dir)
 	}
@@ -91,17 +92,44 @@ func (s *Server) checkDir(dir string, worktree bool) error {
 			return fmt.Errorf("%s isn't a git repo on the dev box: %w", dir, err)
 		}
 	}
-	if !s.trusted(dir) {
+	if s.trusted(dir) {
+		return nil
+	}
+	if !s.underRoot(dir, root) {
 		return errors.New(s.trustAdvice(dir))
 	}
-	return nil
+	return s.trust(dir)
+}
+
+func (s *Server) underRoot(dir, root string) bool {
+	if dir == s.Home {
+		return false
+	}
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	base, err := filepath.EvalSymlinks(s.expand(root))
+	if err != nil {
+		return false
+	}
+	return dir == base || strings.HasPrefix(dir, strings.TrimSuffix(base, "/")+"/")
+}
+
+func (s *Server) trust(dir string) error {
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	top, _ := git(resolved, "rev-parse", "--show-toplevel")
+	return s.Driver.Trust(cmp.Or(mainCheckout(resolved), top, resolved))
 }
 
 func (s *Server) trustAdvice(dir string) string {
 	if dir == s.Home {
 		return "claude trusts the home folder only one session at a time, so use a folder inside it. Set one with gofer init --root"
 	}
-	return fmt.Sprintf("claude doesn't trust %s yet. Run claude there once on the dev box and accept the prompt, then try again", dir)
+	return fmt.Sprintf("claude doesn't trust %s yet, and it's outside your root folder. Run claude there once on the dev box and accept the prompt, then try again", dir)
 }
 
 func (s *Server) trusted(dir string) bool {
@@ -119,7 +147,7 @@ func (s *Server) trusted(dir string) bool {
 
 func (s *Server) prepare(p core.PrepareParams) (core.PrepareResult, error) {
 	dir := s.repoDir(p.Repo, p.Root)
-	if err := s.checkDir(dir, true); err != nil {
+	if err := s.checkDir(dir, p.Root, true); err != nil {
 		return core.PrepareResult{}, err
 	}
 	if p.Name != "" {
@@ -166,7 +194,7 @@ func (s *Server) promptArg(name, text string) (string, error) {
 func (s *Server) admit(p core.RunParams) (store.Agent, error) {
 	dir := s.repoDir(p.Repo, p.Root)
 	worktree := p.Base != ""
-	if err := s.checkDir(dir, worktree); err != nil {
+	if err := s.checkDir(dir, p.Root, worktree); err != nil {
 		return store.Agent{}, err
 	}
 	repo := ""
@@ -274,6 +302,11 @@ func (s *Server) rollback(a store.Agent) {
 
 func (s *Server) provision(p core.RunParams, agent store.Agent) (claude.StartOptions, error) {
 	var options claude.StartOptions
+	if agent.Bypass && !s.Driver.BypassAccepted() {
+		if err := s.Driver.AcceptBypass(); err != nil {
+			return options, err
+		}
+	}
 	settings, err := claude.HookSettings(fmt.Sprintf("%q hook %s", s.goferPath(), agent.Name), agent.Bypass)
 	if err != nil {
 		return options, err
@@ -289,7 +322,10 @@ func (s *Server) provision(p core.RunParams, agent store.Agent) (claude.StartOpt
 }
 
 func (s *Server) launch(a store.Agent) claude.Launch {
-	return claude.Launch{Name: a.Name, Bypass: a.Bypass, Model: a.Model, Effort: a.Effort, Settings: s.Store.SettingsPath(a.Name)}
+	return claude.Launch{
+		Name: a.Name, Bypass: a.Bypass, Model: a.Model, Effort: a.Effort,
+		Settings: s.Store.SettingsPath(a.Name), RemoteControl: s.Driver.CanRemoteControl(),
+	}
 }
 
 func unconfirmed(name string, cause error) error {

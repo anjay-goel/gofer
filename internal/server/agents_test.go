@@ -214,9 +214,9 @@ func TestRefusedBeforeProvisioning(t *testing.T) {
 					t.Fatalf("error %q doesn't name %s", err, repo)
 				}
 			}
-			_, err := f.srv.prepare(core.PrepareParams{Name: "job", Repo: repo})
+			_, err := f.srv.prepare(core.PrepareParams{Name: "job", Repo: repo, Root: "/elsewhere"})
 			check(err)
-			_, err = f.srv.run(core.RunParams{RequestID: "r", Name: "job", Repo: repo, Prompt: "p", Base: head})
+			_, err = f.srv.run(core.RunParams{RequestID: "r", Name: "job", Repo: repo, Root: "/elsewhere", Prompt: "p", Base: head})
 			check(err)
 			if strings.Contains(f.calls(t), "--bg") {
 				t.Fatalf("claude was started: %s", f.calls(t))
@@ -231,6 +231,32 @@ func TestRefusedBeforeProvisioning(t *testing.T) {
 				t.Fatal("the worktree folder changed")
 			}
 		})
+	}
+}
+
+func TestTrustsFoldersUnderTheRoot(t *testing.T) {
+	f := newFixture(t, `[]`)
+	root := filepath.Join(f.home, "code")
+	repo := filepath.Join(root, "api")
+	gitRepo(t, repo)
+	linked := filepath.Join(root, "api-linked")
+	gitIn(t, repo, "worktree", "add", "-q", "-b", "other", linked)
+	outside := filepath.Join(f.home, "other")
+	must(t, os.MkdirAll(outside, 0o755))
+	cases := []struct {
+		dir  string
+		want bool
+	}{
+		{outside, false},
+		{f.home, false},
+		{linked, true},
+		{repo, true},
+	}
+	for _, tc := range cases {
+		err := f.srv.checkDir(tc.dir, root, false)
+		if (err == nil) != tc.want || f.srv.trusted(tc.dir) != tc.want {
+			t.Errorf("%s: err = %v", tc.dir, err)
+		}
 	}
 }
 

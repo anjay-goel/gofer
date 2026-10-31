@@ -1,7 +1,10 @@
 package claude
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/anjay-goel/gofer/internal/core"
@@ -61,6 +64,54 @@ func TestParseEntriesCleanText(t *testing.T) {
 		if got := parseEntries([]byte(tc.line)); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: got %+v", tc.line, got)
 		}
+	}
+}
+
+func TestConfigWritesKeepOtherFields(t *testing.T) {
+	home := t.TempDir()
+	config := filepath.Join(home, ".claude.json")
+	original := `{"numStartups":12345678901234567890,"note":"a<b","projects":{"/old":{"allowedTools":["x"],"hasTrustDialogAccepted":true},"/repo":{"mcpServers":{"a":1}}}}`
+	if err := os.WriteFile(config, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	d := New(home)
+	if err := d.Trust("/repo"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"12345678901234567890", "a<b", `"allowedTools"`, `"mcpServers"`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("lost %s:\n%s", want, data)
+		}
+	}
+	if !d.Trusted("/repo", "/repo") || !d.Trusted("/old", "/old") {
+		t.Fatalf("trust is wrong:\n%s", data)
+	}
+	if info, _ := os.Stat(config); info.Mode().Perm() != 0o640 {
+		t.Fatalf("mode = %v", info.Mode())
+	}
+	if d.BypassAccepted() {
+		t.Fatal("bypass accepted too early")
+	}
+	if err := d.AcceptBypass(); err != nil {
+		t.Fatal(err)
+	}
+	if !d.BypassAccepted() {
+		t.Fatal("bypass not recorded")
+	}
+	if entries, _ := os.ReadDir(home); len(entries) != 2 {
+		t.Fatalf("left files behind: %v", entries)
+	}
+}
+
+func TestLaunchArgs(t *testing.T) {
+	args := Launch{Name: "a", Settings: "s", RemoteControl: true}.args()
+	want := []string{"--name", "a", "--permission-mode", "auto", "--settings", "s", "--remote-control"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("args = %v", args)
 	}
 }
 

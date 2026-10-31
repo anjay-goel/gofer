@@ -1,5 +1,5 @@
 SOURCES := $(shell find . -name '*.go' -o -name '*.md' -o -name 'go.mod' | grep -v '^./dist' | sort)
-VERSION ?= 0.1.0-$(shell cat $(SOURCES) | shasum | cut -c1-10)
+VERSION ?= 0.1.0-$(shell cat $(SOURCES) | cksum | cut -d' ' -f1)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 TARGETS := linux-amd64 linux-arm64
 RELEASES := darwin-arm64 darwin-amd64 linux-amd64 linux-arm64

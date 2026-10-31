@@ -17,11 +17,11 @@ They keep working while your laptop sleeps. Follow them on your phone, and attac
 - **No server:** each command runs `gofer rpc` over SSH, then exits.
 - **Your laptop can sleep:** results wait on the dev box until you ask.
 - **Real Claude:** agents are `claude --bg` sessions, never `claude -p` or the Agent SDK.
-- **Your config stays yours:** hooks are per session, so your settings never change.
+- **Small footprint:** hooks are per session. Gofer only marks repos under your root as trusted, and records your bypass acceptance if you use `--bypass`.
 
 ## Quick start
 
-You need Go 1.22+ and SSH key login to your dev box.
+You need Go 1.22+ and SSH key login to your dev box. The laptop can be macOS or Linux, and the dev box Linux. Tested with Claude Code 2.1.316.
 
 ```sh
 make install
@@ -133,9 +133,10 @@ gofer init odin --root ~/code
 ## Good to know
 
 - **Repos:** `<repo>` is a folder under your root, or a full path. It must already exist on the dev box.
-- **First run in a repo:** Claude has to trust it. Run `claude` there once and accept the prompt.
+- **Trust:** gofer accepts Claude's trust prompt for repos under your root. Anywhere else, run `claude` there once and accept it yourself.
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
-- **Bypass:** `--bypass` skips permission checks, so use it only for work you trust.
+- **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
+- **Phone:** following agents needs a claude.ai login. Gofer turns on Remote Control for its own agents.
 - **Phone sessions:** these show in `gofer ls` and can be messaged, but not attached or removed.
 - **Lost connections:** `gofer run` can't start a second agent on retry. If `gofer send` drops, check `gofer logs` before resending.
 - **Untested:** phone push notifications and waking an agent from the phone.

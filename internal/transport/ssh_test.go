@@ -81,9 +81,9 @@ func TestNetworkErrorRetryable(t *testing.T) {
 		detail string
 		want   bool
 	}{
-		{"ssh: connect to host odin port 22: Operation timed out", true},
-		{"ssh: Could not resolve hostname odin", true},
-		{"anjay@odin: Permission denied (publickey).", false},
+		{"ssh: connect to host box port 22: Operation timed out", true},
+		{"ssh: Could not resolve hostname box", true},
+		{"you@box: Permission denied (publickey).", false},
 		{"Host key verification failed.", false},
 	}
 	for _, tc := range cases {
@@ -98,8 +98,8 @@ func TestLocation(t *testing.T) {
 		host string
 		want string
 	}{
-		{"odin", "odin:/w"},
-		{"u@odin.tail", "u@odin.tail:/w"},
+		{"box", "box:/w"},
+		{"u@box.tail", "u@box.tail:/w"},
 		{"fd7a:115c::1", "[fd7a:115c::1]:/w"},
 		{"u@fd7a:115c::1", "u@[fd7a:115c::1]:/w"},
 	}

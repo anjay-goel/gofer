@@ -184,11 +184,7 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		add("repo root", false, root+" doesn't exist")
 	} else {
 		add("repo root", true, root)
-		if s.trusted(root) {
-			add("workspace trust", true, root)
-		} else {
-			note("workspace trust", s.trustAdvice(root)+". gofer run checks each repo itself")
-		}
+		add("workspace trust", true, "gofer run trusts repos under "+root)
 	}
 	if systemdBooted() {
 		if lingering() {
