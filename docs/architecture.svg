@@ -80,7 +80,7 @@
 
   <path class="wire ssh" d="M220 188H368" marker-end="url(#ssh)"/>
   <text class="label text-ssh" x="290" y="180">SSH</text>
-  <text class="note" x="290" y="204">LAN or VPN</text>
+  <text class="note" x="290" y="204">LAN or Tailscale</text>
 
   <path class="wire plain" d="M508 188H640" marker-end="url(#plain)"/>
   <text class="note" x="574" y="180">start, send</text>
