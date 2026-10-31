@@ -43,7 +43,6 @@ const (
 	Resolve   Method[NameParams, ResolveResult]    = "resolve"
 	Doctor    Method[DoctorParams, []Check]        = "doctor"
 	Linger    Method[struct{}, NoteResult]         = "linger"
-	RCInstall Method[RCParams, NoteResult]         = "rc_install"
 	Uninstall Method[struct{}, UninstallResult]    = "uninstall"
 )
 
@@ -141,11 +140,6 @@ type Check struct {
 
 type DoctorParams struct {
 	Root string `json:"root"`
-}
-
-type RCParams struct {
-	Name string `json:"name"`
-	Dir  string `json:"dir"`
 }
 
 type NoteResult struct {

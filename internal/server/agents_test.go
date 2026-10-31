@@ -647,40 +647,6 @@ func TestExcludeWorktrees(t *testing.T) {
 	}
 }
 
-func TestRCInstall(t *testing.T) {
-	f := newFixture(t, `[]`)
-	systemdRuntime = f.home
-	fake := "#!/bin/sh\necho \"systemctl $*\" >> \"$FAKE_DIR/calls.log\"\n"
-	must(t, os.WriteFile(filepath.Join(f.home, ".local", "bin", "systemctl"), []byte(fake), 0o755))
-	if _, err := f.srv.rcInstall(core.RCParams{Name: "dev box", Dir: f.home}); err == nil {
-		t.Fatal("a name with a space was accepted")
-	}
-	if _, err := f.srv.rcInstall(core.RCParams{Name: "box", Dir: f.home}); err == nil {
-		t.Fatal("the home folder was accepted")
-	}
-	dir := filepath.Join(f.home, "code")
-	must(t, os.MkdirAll(dir, 0o755))
-	steps := []struct {
-		name string
-		want string
-	}{
-		{"box", "systemctl --user restart claude-rc.service"},
-		{"box", "systemctl --user start claude-rc.service"},
-		{"box2", "systemctl --user restart claude-rc.service"},
-	}
-	for _, step := range steps {
-		f.write(t, "calls.log", "")
-		_, err := f.srv.rcInstall(core.RCParams{Name: step.name, Dir: dir})
-		must(t, err)
-		if !f.srv.trusted(dir) {
-			t.Fatal("the service folder isn't trusted")
-		}
-		if !strings.Contains(f.calls(t), step.want) {
-			t.Fatalf("%s: calls = %q", step.want, f.calls(t))
-		}
-	}
-}
-
 func TestTooOldGit(t *testing.T) {
 	cases := map[string]bool{
 		"git version 2.16.6":                 true,
@@ -749,30 +715,6 @@ func TestResolve(t *testing.T) {
 			must(t, err)
 			if r.Job != tc.wantJob {
 				t.Fatalf("result = %+v", r)
-			}
-		})
-	}
-}
-
-func TestOwnsUnit(t *testing.T) {
-	f := newFixture(t, `[]`)
-	if f.srv.ownsUnit() {
-		t.Fatal("a missing unit was claimed")
-	}
-	must(t, os.MkdirAll(filepath.Dir(f.srv.unitPath()), 0o755))
-	cases := []struct {
-		name string
-		unit string
-		want bool
-	}{
-		{"written by gofer", f.srv.unit("box", f.home), true},
-		{"written by someone else", "[Unit]\nDescription=Claude Code Remote Control server\n", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			must(t, os.WriteFile(f.srv.unitPath(), []byte(tc.unit), 0o644))
-			if got := f.srv.ownsUnit(); got != tc.want {
-				t.Fatalf("got %v", got)
 			}
 		})
 	}

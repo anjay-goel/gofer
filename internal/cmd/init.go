@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,9 +109,6 @@ func (a *app) init(args []string) error {
 	yes := fs.Bool("yes", false, "")
 	root := fs.String("workdir", "", "")
 	term := fs.String("terminal", "", "")
-	rc := fs.Bool("rc", false, "")
-	rcName := fs.String("rc-name", "", "")
-	rcDir := fs.String("rc-dir", "", "")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
@@ -164,11 +160,6 @@ func (a *app) init(args []string) error {
 	}
 	if linger.Note != "" {
 		fmt.Println(linger.Note)
-	}
-	if *rc {
-		if err := installRC(client, host, *rcName, cmp.Or(*rcDir, entry.Root)); err != nil {
-			return err
-		}
 	}
 	stop := spinning("Checking " + host)
 	checks, err := transport.Call(client, core.Doctor, core.DoctorParams{Root: entry.Root})
@@ -242,26 +233,6 @@ func updateHost(cfg *config.Config, host, root, term string) (config.Host, error
 	cfg.Hosts[host] = entry
 	cfg.DefaultHost = host
 	return entry, cfg.Save()
-}
-
-func installRC(c *transport.Client, host, name, dir string) error {
-	params := core.RCParams{Name: cmp.Or(name, rcName(host)), Dir: tildePath(dir)}
-	stop := spinning("Installing Remote Control on " + host)
-	result, err := transport.Call(c, core.RCInstall, params)
-	stop()
-	if err != nil {
-		return err
-	}
-	done("%s", result.Note)
-	return nil
-}
-
-func rcName(host string) string {
-	host = host[strings.LastIndex(host, "@")+1:]
-	if net.ParseIP(host) != nil {
-		return strings.ReplaceAll(host, ":", "-")
-	}
-	return strings.ToLower(strings.SplitN(host, ".", 2)[0])
 }
 
 func ensureClaude(c *transport.Client, yes bool) error {

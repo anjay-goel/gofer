@@ -32,7 +32,7 @@ Interact and manage:
   gofer rm <name> [--force]
 
 Set up:
-  gofer init [host] [--workdir dir] [--terminal ssh|rex] [--rc] [--rc-name n] [--rc-dir d] [--yes]
+  gofer init [host] [--workdir dir] [--terminal ssh|rex] [--yes]
   gofer init --remove [host]
   gofer doctor [--live]
   gofer version

@@ -17,7 +17,7 @@ They keep working while your laptop sleeps. Follow them from your phone or brows
 - **No server:** each command runs `gofer rpc` over SSH, then exits.
 - **Your laptop can sleep:** results wait on the dev box until you ask.
 - **Real Claude:** agents are `claude --bg` sessions, never `claude -p` or the Agent SDK.
-- **Small footprint:** hooks are per session. Gofer only records Claude's first-run acceptances: repo trust, `--bypass` and Remote Control.
+- **Small footprint:** hooks are per session. Gofer only records Claude's first-run acceptances: repo trust and `--bypass`.
 
 ## Quick start
 
@@ -125,7 +125,6 @@ gofer init devbox --workdir ~/code
 | --- | --- |
 | `--workdir <dir>` | Folder on the dev box where agents work |
 | `--terminal ssh\|rex` | How `gofer attach` opens |
-| `--rc` | Keep a service running so the Claude app can start sessions |
 | `--yes` | Skip the install prompt |
 
 `gofer init --remove [host]` undoes what gofer installed. Agent state stays on the dev box.
@@ -139,7 +138,7 @@ gofer init devbox --workdir ~/code
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
 - **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
 - **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login.
-- **Starting from the app:** `gofer init --rc` is optional, and separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.
+- **Starting from the app:** `/dev-box-setup` can add this. It's separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.
 - **Lost connections:** `gofer run` can't start a second agent on retry. If `gofer send` drops, check `gofer logs` before resending.
 - **Untested:** phone push notifications and waking an agent from the phone.
 

@@ -52,7 +52,7 @@ Area notes:
 - **Dev tools:** use each tool's official installer, and prefer user-level installs.
 - **CLIs:** check each one's login after installing.
 - **Claude plugins and settings:** show a setting before changing it.
-- **Start sessions from the Claude app:** this keeps a service running so the user can begin work from the app or claude.ai/code with no laptop. They don't need it to follow agents. If gofer is set up, run `gofer init <host> --rc`. Otherwise help them run `claude remote-control` as a user service. It needs a working directory other than the home folder.
+- **Start sessions from the Claude app:** see the section below.
 
 Repos may also expect `.env` files or keys. Tell the user which ones, and they add them themselves.
 
@@ -79,6 +79,43 @@ If a server needs a login, give the user this command to run in their own termin
 ```sh
 ssh -t <host> 'PATH="$HOME/.local/bin:$PATH" claude mcp login <name> --no-browser'
 ```
+
+## Start sessions from the Claude app
+
+This keeps a service running so the user can begin work from the app or claude.ai/code with no laptop. They don't need it to follow agents. It needs systemd, and a folder other than the home folder, because Claude never saves trust there.
+
+First, the user runs this once in their own terminal, accepts any prompts, waits for the session link, then presses Ctrl+C:
+
+```sh
+ssh -t <host> 'cd <folder> && PATH="$HOME/.local/bin:$PATH" claude remote-control'
+```
+
+Then write `~/.config/systemd/user/claude-rc.service` on the box, using the full path of `claude`. The `script` wrapper gives it the terminal it needs.
+
+```ini
+[Unit]
+Description=Claude Code Remote Control server
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+WorkingDirectory=<folder>
+Environment=PATH=<dir of claude>:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/script -qfec "<path to claude> remote-control --name <name>" /dev/null
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now claude-rc.service
+loginctl enable-linger
+```
+
+`active` isn't enough to prove it works, because the service can sit at a prompt. Check for a `Capacity:` line in `journalctl --user -u claude-rc -n 20 -o cat`. If the service already exists, show it and ask before changing it.
 
 ## Rules
 

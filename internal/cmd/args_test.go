@@ -165,20 +165,6 @@ func TestLocalGitKeepsStderrOutOfValues(t *testing.T) {
 	}
 }
 
-func TestRCName(t *testing.T) {
-	cases := map[string]string{
-		"box.tail1234.ts.net": "box",
-		"you@Box":             "box",
-		"10.0.0.5":            "10.0.0.5",
-		"fd7a:115c::1":        "fd7a-115c--1",
-	}
-	for host, want := range cases {
-		if got := rcName(host); got != want {
-			t.Errorf("%q: got %q", host, got)
-		}
-	}
-}
-
 func TestStartRetriesWithTheSameRequest(t *testing.T) {
 	runRetryDelay = time.Millisecond
 	dir := t.TempDir()

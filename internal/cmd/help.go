@@ -83,9 +83,6 @@ Set up a dev box. Asks for anything you leave out.
 Options:
   --workdir <dir>     Folder on the dev box where agents work
   --terminal <name>   How attach opens: ssh or rex
-  --rc                Keep Remote Control running without asking
-  --rc-name <name>    Name for the Remote Control service
-  --rc-dir <dir>      Folder for the Remote Control service
   --yes               Skip the Claude install prompt
   --remove            Undo what gofer installed
 `,

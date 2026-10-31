@@ -283,14 +283,6 @@ func (d *Driver) Remove(job string) error {
 	return err
 }
 
-func (d *Driver) RemoteControlCommand(name string) string {
-	return d.bin + " remote-control --name " + name
-}
-
-func (d *Driver) ServicePath() string {
-	return d.localBin() + ":/usr/local/bin:/usr/bin:/bin"
-}
-
 func Post(socket, text string) error {
 	line, err := json.Marshal(map[string]any{
 		"type":    "user",

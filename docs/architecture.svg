@@ -55,7 +55,7 @@
 
   <rect class="rc" x="640" y="36" width="204" height="44" rx="7"/>
   <text class="title" x="742" y="54">Remote Control</text>
-  <text class="sub" x="742" y="70">session sync, optional claude-rc</text>
+  <text class="sub" x="742" y="70">session sync</text>
 
   <rect class="hot" x="368" y="162" width="140" height="52" rx="7"/>
   <text class="title" x="438" y="183">gofer rpc</text>

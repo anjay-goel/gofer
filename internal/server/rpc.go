@@ -64,7 +64,6 @@ func (s *Server) routes() []route {
 		handle(core.Resolve, s.resolve),
 		handle(core.Doctor, s.doctor),
 		handle(core.Linger, s.linger),
-		handle(core.RCInstall, s.rcInstall),
 		handle(core.Uninstall, s.uninstall),
 	}
 }
