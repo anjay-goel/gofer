@@ -15,5 +15,5 @@ type Skill struct {
 
 var All = []Skill{
 	{Name: "gofer", Text: text},
-	{Name: "gofer-setup", Text: setup},
+	{Name: "dev-box-setup", Text: setup},
 }

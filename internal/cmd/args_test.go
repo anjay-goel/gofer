@@ -241,11 +241,11 @@ func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 func TestAgentTable(t *testing.T) {
 	views := []core.View{
 		{Name: "auth", State: core.StateFailed, Detail: "api_error", Changed: "turn failed, 1m ago", Source: "gofer", New: true},
-		{Name: "phone-session", State: core.StateIdle, Source: "phone"},
+		{Name: "web-session", State: core.StateIdle, Source: "remote"},
 	}
-	plain := "NAME           STATE               CHANGED              SOURCE\n" +
-		"auth*          failed (api_error)  turn failed, 1m ago  gofer\n" +
-		"phone-session  idle                                     phone\n"
+	plain := "NAME         STATE               CHANGED              SOURCE\n" +
+		"auth*        failed (api_error)  turn failed, 1m ago  gofer\n" +
+		"web-session  idle                                     remote\n"
 	if got := agentTable(views); got != plain {
 		t.Fatalf("plain table:\n%s", got)
 	}
@@ -277,5 +277,29 @@ func TestParseKey(t *testing.T) {
 	}
 	if step(0, 3, -1) != 2 || step(2, 3, 1) != 0 {
 		t.Fatal("the list doesn't wrap")
+	}
+}
+
+func TestWantsHelp(t *testing.T) {
+	cases := []struct {
+		command string
+		args    []string
+		want    bool
+	}{
+		{"attach", []string{"--help"}, true},
+		{"attach", []string{"auth", "-h"}, true},
+		{"send", []string{"--help"}, true},
+		{"send", []string{"auth", "what", "does", "--help", "do"}, false},
+		{"run", []string{"api", "--", "--help"}, false},
+	}
+	for _, tc := range cases {
+		if got := wantsHelp(tc.command, tc.args); got != tc.want {
+			t.Errorf("%s %v: got %v", tc.command, tc.args, got)
+		}
+	}
+	for name := range commandHelp {
+		if !strings.HasPrefix(commandHelp[name], "Usage: gofer "+name) {
+			t.Errorf("%s help doesn't start with its usage", name)
+		}
 	}
 }

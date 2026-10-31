@@ -195,10 +195,10 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 	}
 	root := s.expand(p.Root)
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		add("repo root", false, root+" doesn't exist")
+		add("working directory", false, root+" doesn't exist")
 	} else {
-		add("repo root", true, root)
-		add("workspace trust", true, "gofer run trusts repos under "+root)
+		add("working directory", true, root)
+		add("workspace trust", true, "gofer run trusts folders under "+root)
 	}
 	if systemdBooted() {
 		if lingering() {

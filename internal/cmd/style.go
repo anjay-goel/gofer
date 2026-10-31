@@ -69,12 +69,14 @@ func paint(code, text string) string {
 
 func (c cell) String() string { return paint(c.code, c.text) }
 
-func styledUsage() string {
-	lines := strings.Split(usage, "\n")
+func styledHelp(text string) string {
+	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		switch {
 		case strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " "):
 			lines[i] = paint(bold, line)
+		case strings.HasPrefix(line, "Usage: "):
+			lines[i] = paint(bold, "Usage:") + strings.TrimPrefix(line, "Usage:")
 		case strings.HasPrefix(line, "  gofer "):
 			fields := strings.SplitN(line, " ", 5)
 			command := strings.Join(fields[:4], " ")

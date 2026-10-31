@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/anjay-goel/gofer/internal/config"
 	"github.com/anjay-goel/gofer/internal/core"
@@ -35,7 +37,7 @@ func askRoot(cfg *config.Config, host string) string {
 	if !isTTY() || cfg.Hosts[host].Root != "" {
 		return ""
 	}
-	return askText("Repos folder on "+host, "~")
+	return askText("Working directory on "+host, "~")
 }
 
 func pickHost() (string, error) {
@@ -107,7 +109,7 @@ func (a *app) init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	remove := fs.Bool("remove", false, "")
 	yes := fs.Bool("yes", false, "")
-	root := fs.String("root", "", "")
+	root := fs.String("workdir", "", "")
 	term := fs.String("terminal", "", "")
 	rc := fs.Bool("rc", false, "")
 	rcName := fs.String("rc-name", "", "")
@@ -177,7 +179,7 @@ func (a *app) init(args []string) error {
 	if err != nil {
 		return err
 	}
-	if rcMissing(checks) && isTTY() {
+	if rcMissing(checks) && isTTY() && entry.Root != "~" {
 		keep, err := confirm("Keep Remote Control running on " + host + "?")
 		if err != nil {
 			return err
@@ -200,9 +202,21 @@ func (a *app) init(args []string) error {
 	}
 	fmt.Println()
 	done("%s Start your first agent:", paint(bold, "Ready."))
-	fmt.Printf("  %s\n", paint(cyan, `gofer run <repo> "fix the flaky test"`))
-	fmt.Printf("\nTo set up tools, CLIs and MCP servers there, run %s in Claude Code.\n", paint(cyan, "/gofer-setup"))
-	return nil
+	fmt.Printf("  %s\n", paint(cyan, `gofer run <dir> "<prompt>"`))
+	return offerBoxSetup(host)
+}
+
+func offerBoxSetup(host string) error {
+	path, err := exec.LookPath("claude")
+	if err != nil || !isTTY() {
+		return nil
+	}
+	fmt.Println()
+	setUp, err := confirm("Set up tools and MCP servers on " + host + " with Claude?")
+	if err != nil || !setUp {
+		return err
+	}
+	return syscall.Exec(path, []string{"claude", "/dev-box-setup " + host}, os.Environ())
 }
 
 func setUpBox(c *transport.Client, yes bool) (loggedIn bool, err error) {

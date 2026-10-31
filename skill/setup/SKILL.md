@@ -1,9 +1,9 @@
 ---
-name: gofer-setup
-description: Set up a gofer dev box step by step, asking the user what they need. Covers repos, dev tools, CLIs and their logins, MCP servers, Claude plugins and settings. Use after gofer init, or when the user wants to copy their setup to the dev box or says an agent there is missing something.
+name: dev-box-setup
+description: Set up a remote dev box step by step, asking the user what they need. Covers repos, dev tools, CLIs and their logins, MCP servers, Claude plugins and settings. Use when the user wants a remote machine ready for work, wants to copy their setup to it, or says an agent there is missing something.
 ---
 
-# Gofer setup
+# Dev box setup
 
 Help the user make their dev box ready for real work. This is a guided setup, so keep every step small. Ask one thing at a time, and never show a long list or a plan to read through.
 
@@ -11,7 +11,9 @@ Use the multiple-choice question tool when it's available, with short labels and
 
 ## 1. Check quietly
 
-Read the host from `gofer doctor`. If gofer isn't set up, tell the user to run `gofer init` in a terminal, then stop.
+Use the SSH host the user gave you. If they didn't give one, ask. Check that `ssh <host> true` works, and if it doesn't, help them fix SSH first.
+
+Find the working directory on the box. Use the one the user named, or the one `gofer doctor` shows if gofer is set up. Otherwise ask.
 
 Compare the laptop and the box, read-only, without showing the results. Read names, never values.
 
@@ -45,7 +47,7 @@ Do one area at a time, and start it with a one-line note.
 
 Area notes:
 
-- **Repos:** clone into the root folder that `gofer doctor` shows.
+- **Repos:** clone into the working directory.
 - **Dev tools:** use each tool's official installer, and prefer user-level installs.
 - **CLIs:** check each one's login after installing.
 - **Claude plugins and settings:** show a setting before changing it.
@@ -58,7 +60,7 @@ Decide for each server, then recommend:
 
 - A URL on `localhost` or `127.0.0.1`: skip it unless the same service runs on the box.
 - Needs a local browser, app or desktop: usually skip it.
-- HTTP with no headers: copy it, then the user logs in if it asks.
+- HTTP with no headers: copy it, then the user logs in if `claude mcp list` says it needs authentication.
 - Has headers or env values: these may be secrets, so copy them with the command below.
 - Local command: check the command exists on the box first.
 
@@ -69,6 +71,12 @@ jq -c '.mcpServers["<name>"]' ~/.claude.json | ssh <host> 'PATH="$HOME/.local/bi
 ```
 
 Then check it with `claude mcp list` on the box. Servers from claude.ai connectors follow the account, so they need no copying.
+
+If a server needs a login, give the user this command to run in their own terminal, one server at a time. It prints a link. They sign in, then paste the final page's address back, even if that page fails to load.
+
+```sh
+ssh -t <host> 'PATH="$HOME/.local/bin:$PATH" claude mcp login <name> --no-browser'
+```
 
 ## Rules
 
@@ -81,4 +89,4 @@ Then check it with `claude mcp list` on the box. Servers from claude.ai connecto
 
 ## Finish
 
-Run `gofer doctor --live`. Then give a short list of what's ready, what was skipped, and what the user still has to do.
+If gofer is set up, run `gofer doctor --live`. Then give a short list of what's ready, what was skipped, and what the user still has to do.

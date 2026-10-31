@@ -127,9 +127,9 @@ func (s *Server) trust(dir string) error {
 
 func (s *Server) trustAdvice(dir string) string {
 	if dir == s.Home {
-		return "claude trusts the home folder only one session at a time, so use a folder inside it. Set one with gofer init --root"
+		return "claude trusts the home folder only one session at a time, so use a folder inside it. Set one with gofer init --workdir"
 	}
-	return fmt.Sprintf("claude doesn't trust %s yet, and it's outside your root folder. Run claude there once on the dev box and accept the prompt, then try again", dir)
+	return fmt.Sprintf("claude doesn't trust %s yet, and it's outside your working directory. Run claude there once on the dev box and accept the prompt, then try again", dir)
 }
 
 func (s *Server) trusted(dir string) bool {

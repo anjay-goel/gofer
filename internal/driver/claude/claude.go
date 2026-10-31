@@ -75,7 +75,7 @@ func (s Session) Phase() core.State {
 func (s Session) Source(rec Record) string {
 	switch {
 	case rec.Entrypoint == "sdk-cli":
-		return "phone"
+		return "remote"
 	case s.Kind == "background":
 		return "bg"
 	}

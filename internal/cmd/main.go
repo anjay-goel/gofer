@@ -17,8 +17,8 @@ import (
 const usage = `gofer hands work to Claude Code agents on a dev box.
 
 Start and follow:
-  gofer run <repo> "<prompt>" [--name n] [--model m] [--effort e] [--bypass] [--json]
-  gofer run <repo> --doc plan.md --worktree [--name n] [--allow-dirty] [--json]
+  gofer run <dir> "<prompt>" [--name n] [--model m] [--effort e] [--bypass] [--json]
+  gofer run <dir> --doc plan.md --worktree [--name n] [--allow-dirty] [--json]
   gofer ls [--peek] [--json]
   gofer logs <name> [-n lines]
   gofer wait <name>... [--timeout seconds] [--json]
@@ -32,7 +32,7 @@ Interact and manage:
   gofer rm <name> [--force]
 
 Set up:
-  gofer init [host] [--root dir] [--terminal ssh|rex] [--rc] [--rc-name n] [--rc-dir d] [--yes]
+  gofer init [host] [--workdir dir] [--terminal ssh|rex] [--rc] [--rc-name n] [--rc-dir d] [--yes]
   gofer init --remove [host]
   gofer doctor [--live]
   gofer version
@@ -69,10 +69,14 @@ func Main(version string, args []string) int {
 	a := &app{version: version}
 	args, a.hostFlag = extractHost(args)
 	if len(args) == 0 {
-		fmt.Print(styledUsage())
+		fmt.Print(styledHelp(usage))
 		return 0
 	}
 	name, rest := args[0], args[1:]
+	if text, ok := commandHelp[name]; ok && wantsHelp(name, rest) {
+		fmt.Print(styledHelp(text))
+		return 0
+	}
 	var err error
 	switch name {
 	case "rpc":
@@ -84,7 +88,11 @@ func Main(version string, args []string) int {
 		fmt.Println("gofer", version)
 		return 0
 	case "help", "--help", "-h":
-		fmt.Print(styledUsage())
+		text, ok := commandHelp[strings.Join(rest, " ")]
+		if !ok {
+			text = usage
+		}
+		fmt.Print(styledHelp(text))
 		return 0
 	case "init":
 		err = a.init(rest)
@@ -193,7 +201,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	for {
 		err := fs.Parse(args)
 		if errors.Is(err, flag.ErrHelp) {
-			fmt.Print(usage)
+			fmt.Print(styledHelp(commandHelp[fs.Name()]))
 			return nil, exitCode{0, ""}
 		}
 		if err != nil {

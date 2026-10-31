@@ -64,12 +64,19 @@ func (a *app) run(args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		return errors.New("usage: gofer run <repo> \"<prompt>\"")
+		return errors.New("usage: gofer run <dir> \"<prompt>\"")
 	}
 	if err := claude.ValidEffort(*effort); err != nil {
 		return err
 	}
 	repo := pos[0]
+	if repo == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		repo = filepath.Base(cwd)
+	}
 	prompt := strings.Join(pos[1:], " ")
 	params := core.RunParams{
 		RequestID: core.NewRequestID(), Name: *name, Repo: tildePath(repo), Root: a.hostCfg.Root, Prompt: prompt,

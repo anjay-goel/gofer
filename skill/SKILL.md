@@ -5,7 +5,7 @@ description: Delegate work to Claude Code agents on a dev box with the gofer CLI
 
 # Gofer
 
-Gofer runs Claude Code agents on a dev box. They keep working while the laptop sleeps, and the user can follow them on their phone at claude.ai/code.
+Gofer runs Claude Code agents on a dev box. They keep working while the laptop sleeps, and the user can follow them from the Claude app or claude.ai/code.
 
 ## Start here
 
@@ -22,10 +22,10 @@ Gofer is already set up and this page covers its commands, so go straight to `go
 
 ## Starting agents
 
-Quick agent, in a folder on the dev box. `<repo>` is a folder under the configured root, or an absolute or `~/` path, and it must already exist there:
+Quick agent, in a folder on the dev box. `<dir>` is a folder in the working directory, or an absolute or `~/` path, and it must already exist there:
 
 ```sh
-gofer run <repo> "<prompt>" --name <short-name>
+gofer run <dir> "<prompt>" --name <short-name>
 ```
 
 Put `--` before prompt text that starts with a dash. `--model` and `--effort` (`low`, `medium`, `high`, `xhigh` or `max`) pass through to Claude.
@@ -34,14 +34,14 @@ Full handoff from the current repo, on a new `agent/<name>` branch at your exact
 
 ```sh
 git status
-gofer run <repo> --doc plan.md --worktree --name <short-name>
+gofer run <dir> --doc plan.md --worktree --name <short-name>
 ```
 
 An agent only knows what you send it. It can't see this conversation or this laptop. Write a complete prompt: the goal, the relevant paths and branch, how to verify the work, and what to report back.
 
 Agents run in `auto` mode. Only pass `--bypass` when the user asks for it.
 
-`gofer run` trusts repos under the configured root by itself. It refuses an untrusted repo outside the root. Don't start the agent in a parent folder instead, because it would lose the repo's CLAUDE.md and project settings. Stop and give the user this command to run once, then retry: `ssh -t <host> 'cd <path> && claude'`. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
+`gofer run` trusts folders in the working directory by itself. It refuses an untrusted folder outside it. Don't start the agent in a parent folder instead, because it would lose the folder's CLAUDE.md and project settings. Stop and give the user this command to run once, then retry: `ssh -t <host> 'cd <path> && claude'`. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
 
 ## Waiting
 
