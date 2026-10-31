@@ -11,16 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
 const (
-	hideCursor   = "\x1b[?25l"
-	showCursor   = "\x1b[?25h"
-	clearLine    = "\x1b[2K"
-	clearBelow   = "\x1b[J"
-	spinnerDelay = 150 * time.Millisecond
-	spinnerFrame = 80 * time.Millisecond
+	hideCursor    = "\x1b[?25l"
+	showCursor    = "\x1b[?25h"
+	clearLine     = "\x1b[2K"
+	clearBelow    = "\x1b[J"
+	spinnerDelay  = 150 * time.Millisecond
+	spinnerFrame  = 80 * time.Millisecond
+	spinnerGutter = 2
 )
 
 var (
@@ -34,12 +36,12 @@ type choice struct {
 	note  string
 }
 
-func isTTY() bool {
+func stdinIsTerminal() bool {
 	return isTerminal(os.Stdin)
 }
 
 func interactive() bool {
-	return styled && isTTY()
+	return styled && stdinIsTerminal()
 }
 
 func readLine() string {
@@ -59,10 +61,27 @@ func rawTerminal() (func(), error) {
 	if err := set.Run(); err != nil {
 		return nil, err
 	}
+	restore := func() {
+		reset := exec.Command("stty", strings.TrimSpace(string(state)))
+		reset.Stdin = os.Stdin
+		reset.Run()
+	}
+	caught := make(chan os.Signal, 1)
+	signal.Notify(caught, syscall.SIGTERM)
+	leaving := make(chan struct{})
+	go func() {
+		select {
+		case <-caught:
+			restore()
+			fmt.Print(showCursor)
+			os.Exit(errCancelled.code)
+		case <-leaving:
+		}
+	}()
 	return func() {
-		restore := exec.Command("stty", strings.TrimSpace(string(state)))
-		restore.Stdin = os.Stdin
-		restore.Run()
+		signal.Stop(caught)
+		close(leaving)
+		restore()
 	}, nil
 }
 
@@ -216,36 +235,40 @@ func spinning(label string) func() {
 	if !styled {
 		return func() {}
 	}
+	if width := terminalWidth(); width > spinnerGutter {
+		label = clipWidth(label, width-spinnerGutter)
+	}
 	finish := make(chan struct{})
-	interrupted := make(chan os.Signal, 1)
-	signal.Notify(interrupted, os.Interrupt)
+	caught := make(chan os.Signal, 1)
+	signal.Notify(caught, os.Interrupt, syscall.SIGTERM)
 	var wait sync.WaitGroup
 	wait.Add(1)
 	go func() {
 		defer wait.Done()
-		defer signal.Stop(interrupted)
-		select {
-		case <-finish:
-			return
-		case <-interrupted:
-			os.Exit(errCancelled.code)
-		case <-time.After(spinnerDelay):
+		defer signal.Stop(caught)
+		shown := false
+		erase := func() {
+			if shown {
+				fmt.Print("\r" + clearLine + showCursor)
+			}
 		}
-		fmt.Print(hideCursor)
-		restore := "\r" + clearLine + showCursor
-		defer fmt.Print(restore)
-		ticker := time.NewTicker(spinnerFrame)
-		defer ticker.Stop()
+		defer erase()
+		next := time.After(spinnerDelay)
 		for frame := 0; ; frame++ {
-			fmt.Printf("\r%s %s", paint(cyan, spinnerFrames[frame%len(spinnerFrames)]), paint(dim, label))
 			select {
 			case <-finish:
 				return
-			case <-interrupted:
-				fmt.Print(restore)
+			case <-caught:
+				erase()
 				os.Exit(errCancelled.code)
-			case <-ticker.C:
+			case <-next:
 			}
+			if !shown {
+				fmt.Print(hideCursor)
+				shown = true
+			}
+			fmt.Printf("\r%s %s", paint(cyan, spinnerFrames[frame%len(spinnerFrames)]), paint(dim, label))
+			next = time.After(spinnerFrame)
 		}
 	}()
 	var once sync.Once

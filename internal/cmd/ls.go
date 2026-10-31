@@ -24,7 +24,7 @@ func (a *app) ls(args []string) error {
 	if _, err := parseInterspersed(fs, args); err != nil {
 		return err
 	}
-	views, err := spinCall(a.client, "Reading "+a.host, core.List, core.ListParams{Client: a.cfg.Client, Peek: *peek})
+	views, err := spinCall(a.client, "Reading "+a.host, core.List, core.ListParams{ClientID: a.cfg.ClientID, Peek: *peek})
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func commitWord(count *int) string {
 }
 
 func summaryText(v core.View) string {
-	if v.Stuck() && v.Next != "" {
+	if (v.Stuck() || v.State == core.StateUnknown) && v.Next != "" {
 		return "Run " + v.Next
 	}
 	return v.Summary

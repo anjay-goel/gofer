@@ -21,7 +21,7 @@ make install
 - Keep Claude Code formats, flags and CLI facts in `internal/driver/claude`.
 - Keep types that cross SSH in `internal/core`. `internal/store` imports no other internal package.
 - Never use `claude -p` or the Agent SDK. Agents are `claude --bg` sessions.
-- Never change the user's SSH config. Hooks go in per session through `--settings`. The only Claude values gofer writes are `hasTrustDialogAccepted` for folders under the working directory, and `skipDangerousModePermissionPrompt` when someone passes `--bypass`, both through `internal/driver/claude/config.go`. `gofer doctor --live` removes its throwaway folder's entry afterwards.
+- Never change the user's SSH config. Hooks go in per session through `--settings`. The only Claude values gofer writes are `hasTrustDialogAccepted` for folders under the working directory, and `skipDangerousModePermissionPrompt` when someone passes `--bypass`, both through `internal/driver/claude/config.go`.
 - Colour, symbols and terminal escape codes appear only through `internal/cmd/style.go` and `prompt.go`, and output stays plain when it isn't going to a terminal.
 - Keep `gofer ls` fast: nothing per row may scan a whole transcript. Summaries come from the `Stop` hook, with a bounded tail read as the fallback.
 - Tab completion stays local. `gofer __complete` reads the config and the names `gofer ls` caches, and never opens SSH.
@@ -32,7 +32,7 @@ make install
 
 Update these with any change a user or agent would notice:
 
-- `README.md` for commands, flags, limits, design and package changes
+- `README.md` for commands, flags, limits and design
 - `skill/SKILL.md` for how agents should use gofer, and `skill/setup/SKILL.md` for how they set up a box
 
 ## Testing

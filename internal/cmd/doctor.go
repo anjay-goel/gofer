@@ -56,7 +56,7 @@ func (a *app) smoke() error {
 	params := core.RunParams{RequestID: core.NewRequestID(), Name: name, Scratch: true, Root: a.hostCfg.Root, Prompt: prompt, Model: "haiku"}
 	defer transport.Call(a.client, core.Remove, core.RemoveParams{Name: name, Force: true})
 	if _, err := a.start(params); err != nil {
-		return fmt.Errorf("live test couldn't start an agent: %w", err)
+		return fmt.Errorf("live test: couldn't start an agent: %w", err)
 	}
 	r, err := transport.Call(a.client, core.Wait, core.WaitParams{Names: []string{name}, Timeout: 90})
 	if err != nil {
@@ -100,10 +100,10 @@ func printChecks(checks []core.Check) bool {
 	for _, c := range checks {
 		printCheck(c)
 	}
-	return !slices.ContainsFunc(checks, failed)
+	return !slices.ContainsFunc(checks, checkFailed)
 }
 
-func failed(c core.Check) bool {
+func checkFailed(c core.Check) bool {
 	return !c.OK
 }
 
@@ -120,5 +120,5 @@ func printCheckSummary(checks []core.Check) bool {
 		}
 	}
 	done("%d checks passed", passed)
-	return !slices.ContainsFunc(checks, failed)
+	return !slices.ContainsFunc(checks, checkFailed)
 }

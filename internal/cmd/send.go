@@ -32,10 +32,13 @@ func (a *app) send(args []string) error {
 	r, err := spinCall(a.client, "Sending to "+name, core.Send, core.SendParams{Name: name, Message: message})
 	if err != nil {
 		var network transport.NetworkError
-		if errors.As(err, &network) {
-			return exitCode{exitUnconfirmed, fmt.Sprintf("%s. The message may have landed anyway, so check gofer logs %s before resending", err, name)}
+		switch {
+		case !errors.As(err, &network):
+			return err
+		case !network.Retryable():
+			return fmt.Errorf("%w. Fix SSH login to %s, then try again", err, a.host)
 		}
-		return err
+		return exitCode{exitUnconfirmed, fmt.Sprintf("%s. The message may have landed anyway, so check gofer logs %s before resending", err, name)}
 	}
 	if r.Delivered {
 		if r.Action == "resumed" {

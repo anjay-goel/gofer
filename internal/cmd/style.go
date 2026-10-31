@@ -183,7 +183,7 @@ func checkMark(kind string) string {
 
 func stateLabel(v core.View, limit int) string {
 	detail := v.Detail
-	if v.Cut {
+	if v.CutShort {
 		detail = "cut short"
 	}
 	if detail == "" {

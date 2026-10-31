@@ -38,14 +38,14 @@ type View struct {
 	New         bool      `json:"new,omitempty"`
 	Settled     bool      `json:"settled"`
 	Unconfirmed bool      `json:"unconfirmed,omitempty"`
-	Cut         bool      `json:"cut_short,omitempty"`
+	CutShort    bool      `json:"cut_short,omitempty"`
 }
 
 func (v View) Stuck() bool {
-	return v.State == StateBlocked || v.State == StateFailed || v.Cut
+	return v.State == StateBlocked || v.State == StateFailed || v.CutShort
 }
 
-func (v View) Returned() bool {
+func (v View) EndsWait() bool {
 	return v.Settled || v.Unconfirmed || v.State == StateBlocked
 }
 
@@ -53,23 +53,23 @@ func (v View) NextStep() string {
 	switch {
 	case v.State == StateBlocked && (v.Source == "gofer" || v.Source == "bg"):
 		return "gofer attach " + v.Name
-	case v.State == StateFailed, v.Cut:
+	case v.State == StateFailed, v.CutShort:
 		return "gofer send " + v.Name + ` "continue"`
-	case v.Returned():
+	case v.EndsWait():
 		return "gofer logs " + v.Name
 	}
 	return ""
 }
 
 func (v View) Working() bool {
-	return v.State == StateRunning || (v.State == StateIdle && !v.Returned())
+	return v.State == StateRunning || (v.State == StateIdle && !v.EndsWait())
 }
 
 func (v View) Rank() int {
 	switch {
 	case v.State == StateBlocked:
 		return 0
-	case v.State == StateFailed, v.Cut:
+	case v.State == StateFailed, v.CutShort:
 		return 1
 	case v.New && v.Settled:
 		return 2

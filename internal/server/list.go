@@ -65,10 +65,10 @@ func (s *Server) list(p core.ListParams) ([]core.View, error) {
 		if n := len(events); n > 0 {
 			v.Changed = describe(events[n-1], now)
 			v.Ago = ago(events[n-1].Time, now)
-			if p.Client != "" {
-				v.New = n > s.Store.Seen(a.Name, p.Client)
+			if p.ClientID != "" {
+				v.New = n > s.Store.Seen(a.Name, p.ClientID)
 				if !p.Peek {
-					s.Store.MarkSeen(a.Name, p.Client, n)
+					s.Store.MarkSeen(a.Name, p.ClientID, n)
 				}
 			}
 		}

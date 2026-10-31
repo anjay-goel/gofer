@@ -16,54 +16,64 @@ type Candidate struct {
 	Source string
 }
 
+type sshConfig struct {
+	home    string
+	visited map[string]bool
+	hosts   []string
+}
+
+func (c *sshConfig) read(path string) {
+	if c.visited[path] {
+		return
+	}
+	c.visited[path] = true
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		fields := strings.Fields(strings.ReplaceAll(strings.SplitN(scan.Text(), "#", 2)[0], "=", " "))
+		if len(fields) < 2 {
+			continue
+		}
+		switch strings.ToLower(fields[0]) {
+		case "include":
+			c.include(fields[1:])
+		case "host":
+			c.add(fields[1:])
+		}
+	}
+}
+
+func (c *sshConfig) include(patterns []string) {
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(expandInclude(pattern, c.home))
+		sort.Strings(matches)
+		for _, m := range matches {
+			c.read(m)
+		}
+	}
+}
+
+func (c *sshConfig) add(names []string) {
+	for _, name := range names {
+		name = strings.Trim(name, `"`)
+		if !strings.ContainsAny(name, "*?!") && !slices.Contains(c.hosts, name) {
+			c.hosts = append(c.hosts, name)
+		}
+	}
+}
+
 func sshHosts() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	visited := map[string]bool{}
-	var hosts []string
-	var read func(string)
-	read = func(path string) {
-		if visited[path] {
-			return
-		}
-		visited[path] = true
-		f, err := os.Open(path)
-		if err != nil {
-			return
-		}
-		defer f.Close()
-		scan := bufio.NewScanner(f)
-		for scan.Scan() {
-			fields := strings.Fields(strings.ReplaceAll(strings.SplitN(scan.Text(), "#", 2)[0], "=", " "))
-			if len(fields) < 2 {
-				continue
-			}
-			switch strings.ToLower(fields[0]) {
-			case "include":
-				for _, pattern := range fields[1:] {
-					pattern = expandInclude(pattern, home)
-					matches, _ := filepath.Glob(pattern)
-					sort.Strings(matches)
-					for _, m := range matches {
-						read(m)
-					}
-				}
-			case "host":
-				for _, h := range fields[1:] {
-					if strings.ContainsAny(h, "*?!") || seen[h] {
-						continue
-					}
-					seen[h] = true
-					hosts = append(hosts, strings.Trim(h, `"`))
-				}
-			}
-		}
-	}
-	read(filepath.Join(home, ".ssh", "config"))
-	return hosts
+	c := sshConfig{home: home, visited: map[string]bool{}}
+	c.read(filepath.Join(home, ".ssh", "config"))
+	return c.hosts
 }
 
 func expandInclude(pattern, home string) string {

@@ -233,14 +233,15 @@ func TestAgentTable(t *testing.T) {
 	views := []core.View{
 		{Name: "auth", State: core.StateFailed, Detail: strings.Repeat("api_error ", 20), Ago: "1m ago", Source: "gofer", New: true, Next: `gofer send auth "continue"`},
 		{Name: "web-session", State: core.StateIdle, Source: "remote", Summary: "Done"},
-		{Name: "cut", State: core.StateStopped, Cut: true, Source: "gofer", Branch: "agent/cut", Commits: &four, Ago: "2h ago", Summary: strings.Repeat("日本語 words ", 40)},
+		{Name: "cut", State: core.StateStopped, CutShort: true, Source: "gofer", Branch: "agent/cut", Commits: &four, Ago: "2h ago", Summary: strings.Repeat("日本語 words ", 40)},
+		{Name: "bad", State: core.StateUnknown, Source: "gofer", Next: "gofer rm bad --force"},
 	}
 	plain := agentTable(views, 0)
 	lines := strings.Split(strings.TrimSpace(plain), "\n")
 	if want := regexp.MustCompile(`^NAME +STATE +CHANGED +COMMITS +BRANCH +SOURCE +SUMMARY$`); !want.MatchString(lines[0]) {
 		t.Fatalf("plain header: %q", lines[0])
 	}
-	if !strings.Contains(lines[1], `Run gofer send auth "continue"`) || !strings.Contains(lines[3], "stopped (cut short)") || !strings.Contains(lines[3], "4 commits") {
+	if !strings.Contains(lines[1], `Run gofer send auth "continue"`) || !strings.Contains(lines[3], "stopped (cut short)") || !strings.Contains(lines[3], "4 commits") || !strings.Contains(lines[4], "Run gofer rm bad --force") {
 		t.Fatalf("plain table:\n%s", plain)
 	}
 	if strings.Contains(plain, strings.Repeat("api_error ", 10)) || strings.HasSuffix(lines[2], " ") {
@@ -268,7 +269,7 @@ func TestWaitHintsNameTheNextCommand(t *testing.T) {
 	}{
 		{core.View{Name: "a", State: core.StateBlocked, Detail: "permission prompt", Source: "gofer"}, "blocked (permission prompt). Run gofer attach a"},
 		{core.View{Name: "a", State: core.StateFailed, Detail: "rate_limit", Source: "gofer", Settled: true}, `failed (rate_limit). Run gofer send a "continue"`},
-		{core.View{Name: "a", State: core.StateStopped, Cut: true, Source: "gofer", Settled: true}, `stopped (cut short). Run gofer send a "continue"`},
+		{core.View{Name: "a", State: core.StateStopped, CutShort: true, Source: "gofer", Settled: true}, `stopped (cut short). Run gofer send a "continue"`},
 		{core.View{Name: "a", State: core.StateIdle, Source: "gofer", Unconfirmed: true}, "idle, but its turn can't be confirmed finished, so this work may be stale. Run gofer logs a"},
 		{core.View{Name: "a", State: core.StateIdle, Source: "gofer", Settled: true}, "idle"},
 		{core.View{Name: "a", State: core.StateBlocked, Source: "remote"}, "blocked. Run gofer logs a"},
@@ -385,6 +386,37 @@ func TestCompletion(t *testing.T) {
 		if got := candidates(cfg, tc.words); !slices.Equal(got, tc.want) {
 			t.Errorf("%q: got %q, want %q", tc.words, got, tc.want)
 		}
+	}
+}
+
+func TestSendOnlyDoubtsDeliveryWhenItMayHaveLanded(t *testing.T) {
+	cases := []struct {
+		name    string
+		failure string
+		want    int
+	}{
+		{"dropped connection", "connection reset", exitUnconfirmed},
+		{"refused login", "Permission denied (publickey)", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			script := "#!/bin/sh\necho '" + tc.failure + "' >&2\nexit 255\n"
+			if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+			a := &app{host: "box", client: &transport.Client{Host: "box", Version: "v"}}
+			err := a.send([]string{"auth", "hi"})
+			got := 1
+			var code exitCode
+			if errors.As(err, &code) {
+				got = code.code
+			}
+			if got != tc.want {
+				t.Fatalf("exit %d: %v", got, err)
+			}
+		})
 	}
 }
 

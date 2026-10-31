@@ -62,10 +62,7 @@ func (a *app) logs(args []string) error {
 
 func printLines(lines []core.LogLine) {
 	for _, l := range lines {
-		look, ok := roleLooks[l.Role]
-		if !ok {
-			look = cell{l.Role, ""}
-		}
+		look := roleLooks[l.Role]
 		indent := strings.Repeat(" ", logIndent)
 		text := strings.ReplaceAll(strings.TrimSpace(l.Text), "\n", "\n"+indent)
 		text = strings.ReplaceAll(text, indent+"\n", "\n")
@@ -155,9 +152,7 @@ func (a *app) longPoll(label string, deadline time.Time, call func(time.Duration
 				return r, fmt.Errorf("%w. Fix SSH login to %s, then try again", err, a.host)
 			}
 			report(network.Error())
-			stop()
 			time.Sleep(min(backoff, slice))
-			start()
 			backoff = min(backoff*2, backoffMax)
 			continue
 		}
@@ -176,7 +171,7 @@ func (a *app) wait(args []string) error {
 	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
 	timeout := fs.Int("timeout", 0, "")
 	asJSON := fs.Bool("json", false, "")
-	first := fs.Bool("any", false, "")
+	anyOne := fs.Bool("any", false, "")
 	notify := fs.Bool("notify", false, "")
 	names, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -190,11 +185,8 @@ func (a *app) wait(args []string) error {
 		deadline = time.Now().Add(time.Duration(*timeout) * time.Second)
 	}
 	label := "Waiting for " + strings.Join(names, ", ")
-	if *asJSON {
-		label = ""
-	}
 	r, err := a.longPoll(label, deadline, func(slice time.Duration) (core.WaitResult, error) {
-		params := core.WaitParams{Names: names, Timeout: int(math.Ceil(slice.Seconds())), Any: *first}
+		params := core.WaitParams{Names: names, Timeout: int(math.Ceil(slice.Seconds())), Any: *anyOne}
 		return transport.CallWithin(a.client, slice+waitMargin, core.Wait, params)
 	})
 	if err != nil {

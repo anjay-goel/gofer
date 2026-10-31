@@ -75,7 +75,7 @@ func tally(result *core.WaitResult, v core.View) {
 	if v.State == core.StateBlocked {
 		result.Blocked = true
 	}
-	if v.State == core.StateFailed || v.Cut {
+	if v.State == core.StateFailed || v.CutShort {
 		result.Failed = true
 	}
 	if v.Unconfirmed {
@@ -86,7 +86,7 @@ func tally(result *core.WaitResult, v core.View) {
 	result.Views = append(result.Views, v)
 }
 
-func (s *Server) waitPass(names []string, first bool) (core.WaitResult, error) {
+func (s *Server) waitPass(names []string, firstOnly bool) (core.WaitResult, error) {
 	snap, err := s.snapshot()
 	if err != nil {
 		return core.WaitResult{Trouble: "can't read claude's agent list: " + err.Error()}, nil
@@ -105,7 +105,7 @@ func (s *Server) waitPass(names []string, first bool) (core.WaitResult, error) {
 		if v.State == core.StateBlocked {
 			v.Detail = s.blockReason(t, v.Detail)
 		}
-		if first && v.Returned() {
+		if firstOnly && v.EndsWait() {
 			result = core.WaitResult{Finished: true}
 			tally(&result, v)
 			return result, nil

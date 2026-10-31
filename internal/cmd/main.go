@@ -21,7 +21,7 @@ Start and follow:
   gofer run <dir> "<prompt>" [--name n] [--model m] [--effort e] [--bypass] [--json]
   gofer run <dir> --doc plan.md --worktree [--name n] [--allow-dirty] [--json]
   gofer ls [--peek] [--json]
-  gofer logs <name> [-n lines] [-f]
+  gofer logs <name> [-n count] [-f]
   gofer wait <name>... [--any] [--notify] [--timeout seconds] [--json]
 
 Interact and manage:

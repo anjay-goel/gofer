@@ -44,7 +44,7 @@ func desktopAlert(title, body string) bool {
 
 func raiseAlerts(r core.WaitResult, inTerminal bool) {
 	for _, v := range r.Views {
-		if !v.Returned() {
+		if !v.EndsWait() {
 			continue
 		}
 		title, body := alertText(v)

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *Server) checkDir(dir, root string, worktree bool) error {
+func checkDir(dir string, worktree bool) error {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return fmt.Errorf("%s doesn't exist on the dev box", dir)
 	}
@@ -17,6 +17,13 @@ func (s *Server) checkDir(dir, root string, worktree bool) error {
 		if _, err := git(dir, "rev-parse", "--git-dir"); err != nil {
 			return fmt.Errorf("%s isn't a git repo on the dev box: %w", dir, err)
 		}
+	}
+	return nil
+}
+
+func (s *Server) readyDir(dir, root string, worktree bool) error {
+	if err := checkDir(dir, worktree); err != nil {
+		return err
 	}
 	if s.trusted(dir) {
 		return nil

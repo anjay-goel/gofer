@@ -158,7 +158,7 @@ func TestListLeadsWithWhatNeedsYou(t *testing.T) {
 	}
 	want := []string{"blocked", "fail", "dead", "news", "busy", "done"}
 	for run := 0; run < 2; run++ {
-		views, err := f.srv.list(core.ListParams{Client: "c", Peek: true})
+		views, err := f.srv.list(core.ListParams{ClientID: "c", Peek: true})
 		must(t, err)
 		var got []string
 		byName := map[string]core.View{}
@@ -464,7 +464,7 @@ func TestTrustsFoldersUnderTheRoot(t *testing.T) {
 		{repo, true},
 	}
 	for _, tc := range cases {
-		err := f.srv.checkDir(tc.dir, root, false)
+		err := f.srv.readyDir(tc.dir, root, false)
 		if (err == nil) != tc.want || f.srv.trusted(tc.dir) != tc.want {
 			t.Errorf("%s: err = %v", tc.dir, err)
 		}

@@ -69,7 +69,7 @@ func (a *app) rm(args []string) error {
 }
 
 func (a *app) rmFinished() error {
-	views, err := spinCall(a.client, "Reading "+a.host, core.List, core.ListParams{Client: a.cfg.Client, Peek: true})
+	views, err := spinCall(a.client, "Reading "+a.host, core.List, core.ListParams{ClientID: a.cfg.ClientID, Peek: true})
 	if err != nil {
 		return err
 	}

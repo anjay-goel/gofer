@@ -119,7 +119,7 @@ func (s *Server) agentView(t target, now time.Time) core.View {
 		Name: a.Name, ID: a.SessionID, State: state, Detail: detail,
 		Source: "gofer", Dir: a.Dir, Branch: a.Branch,
 		Settled: settled, Unconfirmed: unconfirmed, Summary: a.Summary, Link: s.link(t),
-		Cut: state == core.StateStopped && !s.turnEnded(a),
+		CutShort: state == core.StateStopped && !s.turnEnded(a),
 	}
 	if t.listed && t.sess.Cwd != "" {
 		v.Dir = t.sess.Cwd
@@ -157,8 +157,7 @@ func (s *Server) turnEnded(a store.Agent) bool {
 	if !a.LastStop.Before(a.LastInput) {
 		return true
 	}
-	ended, err := s.Driver.TurnEnded(a.SessionID, a.LastToken)
-	return err == nil && ended
+	return s.Driver.TurnEnded(a.SessionID, a.LastToken)
 }
 
 func (s *Server) find(name string, snap snapshot) (target, error) {
@@ -239,7 +238,7 @@ func (s *Server) resolve(p core.NameParams) (core.ResolveResult, error) {
 	case !t.listed:
 		r.Note = "claude no longer lists this session, so there's nothing to attach to. Wake it with gofer send"
 	case t.sess.Job == "":
-		r.Note = "this session was not started with claude --bg, so it can't be attached. Follow it on claude.ai/code, or message it with gofer send"
+		r.Note = "this session wasn't started with claude --bg, so it can't be attached. Follow it on claude.ai/code, or message it with gofer send"
 	}
 	if t.listed && t.sess.Cwd != "" {
 		if _, err := os.Stat(t.sess.Cwd); err == nil {

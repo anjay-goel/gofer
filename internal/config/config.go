@@ -18,7 +18,7 @@ type Host struct {
 
 type Config struct {
 	DefaultHost string          `json:"host"`
-	Client      string          `json:"client"`
+	ClientID    string          `json:"client"`
 	Hosts       map[string]Host `json:"hosts"`
 }
 
@@ -57,8 +57,8 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Save() error {
-	if c.Client == "" {
-		c.Client = core.RandomHex(6)
+	if c.ClientID == "" {
+		c.ClientID = core.RandomHex(6)
 	}
 	path, err := configPath()
 	if err != nil {

@@ -83,7 +83,7 @@ func (s *Server) unique(base, repo string) (string, error) {
 
 func (s *Server) prepare(p core.PrepareParams) (core.PrepareResult, error) {
 	dir := s.repoDir(p.Repo, p.Root)
-	if err := s.checkDir(dir, p.Root, true); err != nil {
+	if err := s.readyDir(dir, p.Root, true); err != nil {
 		return core.PrepareResult{}, err
 	}
 	if p.Name != "" {
@@ -127,7 +127,7 @@ func (s *Server) admit(p core.RunParams) (store.Agent, error) {
 	dir := s.repoDir(p.Repo, p.Root)
 	worktree := p.Base != ""
 	if !p.Scratch {
-		if err := s.checkDir(dir, p.Root, worktree); err != nil {
+		if err := s.readyDir(dir, p.Root, worktree); err != nil {
 			return store.Agent{}, err
 		}
 	}
@@ -237,7 +237,10 @@ func (s *Server) start(p core.RunParams, agent store.Agent) (string, error) {
 			return "", err
 		}
 	}
-	prompt, err := s.provision(p, agent)
+	if err := s.provision(agent); err != nil {
+		return "", err
+	}
+	prompt, err := s.promptArg(agent.Name, buildPrompt(p, agent.Branch))
 	if err != nil {
 		return "", err
 	}
@@ -271,21 +274,18 @@ func (s *Server) rollback(a store.Agent) {
 	s.Store.Delete(a.Name)
 }
 
-func (s *Server) provision(p core.RunParams, agent store.Agent) (string, error) {
+func (s *Server) provision(agent store.Agent) error {
 	if agent.Bypass && !s.Driver.BypassAccepted() {
 		if err := s.Driver.AcceptBypass(); err != nil {
-			return "", err
+			return err
 		}
 	}
 	gofer := filepath.Join(s.dataDir(), "gofer")
 	settings, err := claude.HookSettings(fmt.Sprintf("%q hook %s", gofer, agent.Name), agent.Bypass)
 	if err != nil {
-		return "", err
+		return err
 	}
-	if err := s.Store.WriteSettings(agent.Name, settings); err != nil {
-		return "", err
-	}
-	return s.promptArg(agent.Name, buildPrompt(p, agent.Branch))
+	return s.Store.WriteSettings(agent.Name, settings)
 }
 
 func (s *Server) launch(a store.Agent) claude.Launch {

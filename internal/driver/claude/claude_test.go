@@ -200,10 +200,33 @@ func TestTranscriptReadsPickUpWhereTheyStopped(t *testing.T) {
 	if got := d.LastReply("s"); got != "" {
 		t.Fatalf("a reply older than the last input came back: %q", got)
 	}
-	if err := os.WriteFile(path, []byte(strings.Repeat("x", 2*replyTail)+"\n"+first), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 2*tailLimit)+"\n"+first), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.LastReply("s"); got != "one" {
 		t.Fatalf("got %q", got)
+	}
+	input := `{"type":"user","message":{"content":"go [gofer-0123456789]"}}` + "\n"
+	endTurn := `{"type":"assistant","message":{"stop_reason":"end_turn"}}` + "\n"
+	padding := strings.Repeat("x", 2*tailLimit) + "\n"
+	cases := []struct {
+		name       string
+		transcript string
+		token      string
+		want       bool
+	}{
+		{"ended past a huge prefix", padding + endTurn, "", true},
+		{"ended after the token", padding + input + endTurn, "gofer-0123456789", true},
+		{"token not delivered yet", endTurn, "gofer-0123456789", false},
+		{"token too old for the bounded read", input + padding + endTurn, "gofer-0123456789", false},
+		{"a later input reopens the turn", endTurn + input, "", false},
+	}
+	for _, tc := range cases {
+		if err := os.WriteFile(path, []byte(tc.transcript), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := d.TurnEnded("s", tc.token); got != tc.want {
+			t.Errorf("%s: got %v", tc.name, got)
+		}
 	}
 }

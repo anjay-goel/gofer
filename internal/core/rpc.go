@@ -75,8 +75,8 @@ type RunParams struct {
 }
 
 type ListParams struct {
-	Client string `json:"client"`
-	Peek   bool   `json:"peek"`
+	ClientID string `json:"client"`
+	Peek     bool   `json:"peek"`
 }
 
 type WaitParams struct {

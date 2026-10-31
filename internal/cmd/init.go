@@ -19,14 +19,14 @@ import (
 )
 
 func askRoot(cfg *config.Config, host string) string {
-	if !isTTY() || cfg.Hosts[host].Root != "" {
+	if !stdinIsTerminal() || cfg.Hosts[host].Root != "" {
 		return ""
 	}
 	return askText("Working directory on "+host, "~")
 }
 
 func pickHost() (string, error) {
-	if !isTTY() {
+	if !stdinIsTerminal() {
 		return "", errors.New("no host given and no terminal for the picker. Run gofer init <host>")
 	}
 	candidates := config.Candidates()
@@ -218,7 +218,7 @@ func ensureClaude(c *transport.Client, yes bool) error {
 	}
 	fmt.Printf("Claude Code isn't installed on %s.\nThe official install command is:\n  %s\n", c.Host, claude.InstallScript)
 	if !yes {
-		if !isTTY() {
+		if !stdinIsTerminal() {
 			return errors.New("not installing without confirmation. Run with --yes, or install Claude Code first")
 		}
 		install, err := confirm("Run it on " + c.Host + "?")
@@ -248,7 +248,7 @@ func ensureLogin(c *transport.Client) (bool, error) {
 	if loggedIn(c) {
 		return true, nil
 	}
-	if !isTTY() {
+	if !stdinIsTerminal() {
 		fmt.Printf("Claude Code isn't logged in on %s. Run gofer init %s in a terminal to log in.\n", c.Host, c.Host)
 		return false, nil
 	}

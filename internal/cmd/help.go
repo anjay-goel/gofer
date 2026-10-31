@@ -81,7 +81,7 @@ Stop an agent and keep its conversation.
 Remove agents and their worktrees. Branches stay. Running agents are refused.
 
 Options:
-  --force     Remove despite running or uncommitted or unfetched work
+  --force     Remove despite running, uncommitted or unfetched work
   --finished  Remove every finished agent, skipping unsaved or unfinished work
 `,
 	"init": `Usage: gofer init [host] [options]

@@ -93,7 +93,7 @@ func (s *Server) doctor(p core.DoctorParams) ([]core.Check, error) {
 		if lingering() {
 			add("lingering", true, "")
 		} else {
-			add("lingering", false, "services stop at logout. Run loginctl enable-linger")
+			add("lingering", false, "agents stop at logout. Run loginctl enable-linger")
 		}
 	}
 	return checks, nil

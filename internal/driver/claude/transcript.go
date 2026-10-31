@@ -19,7 +19,7 @@ import (
 const (
 	toolClip     = 120
 	summaryLimit = 240
-	replyTail    = 256 * 1024
+	tailLimit    = 256 * 1024
 	peerPrefix   = "Another Claude session sent a message:"
 	peerSuffix   = "This came from another Claude session"
 )
@@ -95,22 +95,26 @@ func (d *Driver) TranscriptFrom(sessionID string, offset int64) ([]core.LogLine,
 	return out, next, err
 }
 
-func (d *Driver) LastReply(sessionID string) string {
+func (d *Driver) tailLines(sessionID string) [][]byte {
 	f, err := os.Open(d.transcriptPath(sessionID))
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return ""
+		return nil
 	}
-	start := max(info.Size()-replyTail, 0)
+	start := max(info.Size()-tailLimit, 0)
 	tail := make([]byte, info.Size()-start)
 	if _, err := f.ReadAt(tail, start); err != nil {
-		return ""
+		return nil
 	}
-	lines := bytes.Split(tail, []byte("\n"))
+	return bytes.Split(tail, []byte("\n"))
+}
+
+func (d *Driver) LastReply(sessionID string) string {
+	lines := d.tailLines(sessionID)
 	for i := len(lines) - 1; i >= 0; i-- {
 		entries := parseEntries(lines[i])
 		for j := len(entries) - 1; j >= 0; j-- {
@@ -156,10 +160,10 @@ func (d *Driver) TranscriptSince(sessionID string, tokenTag *regexp.Regexp) ([]c
 	return out, err
 }
 
-func (d *Driver) TurnEnded(sessionID, token string) (bool, error) {
+func (d *Driver) TurnEnded(sessionID, token string) bool {
 	seen := token == ""
 	ended := false
-	err := d.scan(sessionID, func(line []byte) {
+	for _, line := range d.tailLines(sessionID) {
 		var row struct {
 			Type    string `json:"type"`
 			Message struct {
@@ -167,7 +171,7 @@ func (d *Driver) TurnEnded(sessionID, token string) (bool, error) {
 			} `json:"message"`
 		}
 		if json.Unmarshal(line, &row) != nil {
-			return
+			continue
 		}
 		switch {
 		case row.Type == "assistant":
@@ -177,8 +181,8 @@ func (d *Driver) TurnEnded(sessionID, token string) (bool, error) {
 		case row.Type == "user":
 			ended = false
 		}
-	})
-	return ended, err
+	}
+	return ended
 }
 
 func deliversInput(line []byte, tokenTag *regexp.Regexp) bool {
