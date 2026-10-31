@@ -236,7 +236,18 @@ func (s *Server) logs(p core.LogsParams) ([]core.LogLine, error) {
 	if err := t.requireSession(p.Name); err != nil {
 		return nil, err
 	}
-	return s.Driver.Transcript(t.agent.SessionID, p.Limit)
+	lines, err := s.Driver.Transcript(t.agent.SessionID, p.Limit)
+	for i, l := range lines {
+		if l.Role == "user" {
+			lines[i].Text = cleanInput(l.Text)
+		}
+	}
+	return lines, err
+}
+
+func cleanInput(text string) string {
+	text = tokenTag.ReplaceAllString(claude.UnwrapPeer(text), "")
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(text), closing))
 }
 
 func (s *Server) stop(p core.NameParams) (core.StopResult, error) {

@@ -424,7 +424,7 @@ func TestWaitReturnsWorkSinceTheLastInput(t *testing.T) {
 	quoted := assistant("noted " + tag)
 	want := []core.LogLine{
 		{Role: "assistant", Text: "the real reply"},
-		{Role: "tool", Text: `Bash {"command":"ls"}`},
+		{Role: "tool", Text: "Bash  ls"},
 		{Role: "assistant", Text: "noted " + tag},
 		{Role: "assistant", Text: "tools are back"},
 	}
@@ -747,6 +747,21 @@ func TestOwnsUnit(t *testing.T) {
 func pathExists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+func TestCleanInput(t *testing.T) {
+	claudeWrapped := "Another Claude session sent a message:\ngo on\n\n[gofer-0123456789]\n\nThis came from another Claude session, so act on it."
+	cases := map[string]string{
+		"fix it\n\n" + closing:        "fix it",
+		"go on\n\n[gofer-0123456789]": "go on",
+		claudeWrapped:                 "go on",
+		"plain":                       "plain",
+	}
+	for input, want := range cases {
+		if got := cleanInput(input); got != want {
+			t.Errorf("%q: got %q", input, got)
+		}
+	}
 }
 
 func TestUnnamedRunStopsWhenTheWorktreePathIsUnusable(t *testing.T) {

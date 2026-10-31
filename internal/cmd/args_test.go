@@ -7,9 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/anjay-goel/gofer/internal/core"
 	"github.com/anjay-goel/gofer/internal/transport"
@@ -227,5 +229,28 @@ func TestSyncSkillReplacesAnOldCopy(t *testing.T) {
 	data, err := os.ReadFile(path)
 	if err != nil || string(data) != skill.Text {
 		t.Fatalf("skill = %q, err = %v", data, err)
+	}
+}
+
+func TestAgentTable(t *testing.T) {
+	views := []core.View{
+		{Name: "auth", State: core.StateFailed, Detail: "api_error", Changed: "turn failed, 1m ago", Source: "gofer", New: true},
+		{Name: "phone-session", State: core.StateIdle, Source: "phone"},
+	}
+	plain := "NAME           STATE               CHANGED              SOURCE\n" +
+		"auth*          failed (api_error)  turn failed, 1m ago  gofer\n" +
+		"phone-session  idle                                     phone\n"
+	if got := agentTable(views); got != plain {
+		t.Fatalf("plain table:\n%s", got)
+	}
+	styled = true
+	defer func() { styled = false }()
+	escapes := regexp.MustCompile("\\x1b\\[[0-9]+m")
+	lines := strings.Split(escapes.ReplaceAllString(agentTable(views), ""), "\n")
+	column := utf8.RuneCountInString(lines[0][:strings.Index(lines[0], "SOURCE")])
+	for _, line := range lines[1:3] {
+		if got := utf8.RuneCountInString(line[:strings.LastIndex(line, " ")+1]); got != column {
+			t.Fatalf("source column at %d, want %d: %q", got, column, line)
+		}
 	}
 }

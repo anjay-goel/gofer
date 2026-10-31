@@ -122,7 +122,7 @@ func Main(version string, args []string) int {
 		}
 		return code.code
 	}
-	fmt.Fprintln(os.Stderr, "gofer:", err)
+	fmt.Fprintln(os.Stderr, errorPrefix(), err)
 	return 1
 }
 

@@ -31,17 +31,15 @@ func (a *app) doctor(args []string) error {
 	allOK := printChecks(checks)
 	if _, err := exec.LookPath("rex"); err == nil {
 		if terminal.RexReaches(a.host) {
-			fmt.Println("ok   rex: reaches", a.host)
+			fmt.Println(checkMark("ok"), "rex: reaches", a.host)
 		} else {
-			fmt.Printf("note rex: can't reach a Rex host called %s. Attach will use SSH\n", a.host)
+			fmt.Printf("%s rex: can't reach a Rex host called %s. Attach will use SSH\n", checkMark("note"), a.host)
 		}
 	}
 	if *live {
 		if err := a.smoke(); err != nil {
 			return err
 		}
-	} else {
-		fmt.Println("tip  LAN switching and SSH ControlMaster make commands faster. Add them to ~/.ssh/config yourself")
 	}
 	if !allOK {
 		return exitCode{1, ""}
@@ -79,6 +77,6 @@ func (a *app) smoke() error {
 	if len(reply.Views) != 1 || !slices.ContainsFunc(reply.Views[0].Work, echoed) {
 		return errors.New("live test: no reply to the message")
 	}
-	fmt.Println("ok   live test: start, wait, send and reply")
+	fmt.Println(checkMark("ok"), "live test: start, wait, send and reply")
 	return nil
 }

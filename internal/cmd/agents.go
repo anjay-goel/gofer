@@ -10,8 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
-	"text/tabwriter"
 	"time"
 	"unicode/utf8"
 
@@ -29,6 +29,7 @@ const (
 	backoffMax    = 30 * time.Second
 	runAttempts   = 5
 	localGitLimit = time.Hour
+	logIndent     = 8
 )
 
 var runRetryDelay = 5 * time.Second
@@ -97,12 +98,13 @@ func (a *app) run(args []string) error {
 	if *asJSON {
 		return printJSON(view)
 	}
-	fmt.Printf("Started %s\n  id:   %s\n  dir:  %s\n", view.Name, view.ID, view.Dir)
+	done("Started %s on %s", paint(bold, view.Name), a.host)
+	fmt.Printf("  %s  %s\n", paint(dim, "folder"), view.Dir)
 	if view.Link != "" {
-		fmt.Printf("  web:  %s\n", view.Link)
+		fmt.Printf("  %s  %s\n", paint(dim, "follow"), view.Link)
 	}
 	if remote != "" {
-		fmt.Printf("  code: git fetch %s %s\n", remote, view.Branch)
+		fmt.Printf("  %s   git fetch %s %s\n", paint(dim, "fetch"), remote, view.Branch)
 	}
 	return nil
 }
@@ -169,16 +171,29 @@ func (a *app) ls(args []string) error {
 		fmt.Println("No agents on", a.host)
 		return nil
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATE\tCHANGED\tBRANCH\tSOURCE")
-	for _, v := range views {
-		marker := ""
-		if v.New {
-			marker = "*"
+	fmt.Print(agentTable(views))
+	return nil
+}
+
+func agentTable(views []core.View) string {
+	branches := slices.ContainsFunc(views, func(v core.View) bool { return v.Branch != "" })
+	row := func(name, state, changed, branch, source cell) []cell {
+		cells := []cell{name, state, changed}
+		if branches {
+			cells = append(cells, branch)
 		}
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%s\n", v.Name, marker, stateLabel(v), v.Changed, v.Branch, v.Source)
+		return append(cells, source)
 	}
-	return w.Flush()
+	header := func(title string) cell { return cell{title, dim} }
+	rows := [][]cell{row(header("NAME"), header("STATE"), header("CHANGED"), header("BRANCH"), header("SOURCE"))}
+	for _, v := range views {
+		name := cell{v.Name, bold}
+		if v.New {
+			name.text += "*"
+		}
+		rows = append(rows, row(name, stateCell(v), cell{v.Changed, dim}, cell{v.Branch, ""}, cell{v.Source, dim}))
+	}
+	return table(rows)
 }
 
 func (a *app) logs(args []string) error {
@@ -201,7 +216,17 @@ func (a *app) logs(args []string) error {
 
 func printLines(lines []core.LogLine) {
 	for _, l := range lines {
-		fmt.Printf("[%s] %s\n", l.Role, l.Text)
+		look, ok := roleLooks[l.Role]
+		if !ok {
+			look = cell{l.Role, ""}
+		}
+		indent := strings.Repeat(" ", logIndent)
+		text := strings.ReplaceAll(strings.TrimSpace(l.Text), "\n", "\n"+indent)
+		text = strings.ReplaceAll(text, indent+"\n", "\n")
+		if l.Role == "tool" {
+			text = paint(dim, text)
+		}
+		fmt.Printf("%s%s%s\n", look, strings.Repeat(" ", logIndent-len(look.text)), text)
 	}
 }
 
@@ -213,17 +238,20 @@ func stateLabel(v core.View) string {
 }
 
 func printWait(r core.WaitResult) {
-	for _, v := range r.Views {
-		state := stateLabel(v)
+	for i, v := range r.Views {
+		if i > 0 {
+			fmt.Println()
+		}
+		state := stateCell(v)
 		switch {
 		case v.Cut:
-			state += ", cut short before finishing. Use gofer send to wake it"
+			state.text += ", cut short before finishing. Use gofer send to wake it"
 		case v.State == core.StateFailed:
-			state += ". Use gofer send to try again"
+			state.text += ". Use gofer send to try again"
 		case v.Unconfirmed:
-			state += ", but its turn can't be confirmed finished, so this work may be stale. Check gofer logs " + v.Name
+			state.text += ", but its turn can't be confirmed finished, so this work may be stale. Check gofer logs " + v.Name
 		}
-		fmt.Printf("== %s: %s\n", v.Name, state)
+		fmt.Printf("%s: %s\n", paint(bold, v.Name), state)
 		printLines(v.Work)
 	}
 }
@@ -334,7 +362,11 @@ func (a *app) send(args []string) error {
 		return err
 	}
 	if r.Delivered {
-		fmt.Printf("Delivered to %s (%s)\n", name, r.Action)
+		if r.Action == "resumed" {
+			done("Woke %s and delivered your message", name)
+		} else {
+			done("Delivered to %s", name)
+		}
 		return nil
 	}
 	return exitCode{exitUnconfirmed, fmt.Sprintf("Sent to %s (%s), delivery not confirmed: %s", name, r.Action, r.Note)}
@@ -451,10 +483,10 @@ func (a *app) stop(args []string) error {
 		return err
 	}
 	if r.AlreadyStopped {
-		fmt.Println(pos[0], "was already stopped")
+		done("%s was already stopped", pos[0])
 		return nil
 	}
-	fmt.Println("Stopped", pos[0])
+	done("Stopped %s", pos[0])
 	return nil
 }
 
@@ -476,7 +508,7 @@ func (a *app) rm(args []string) error {
 			return err
 		}
 		if r.Unfetched == "" {
-			fmt.Println("Removed", name)
+			done("Removed %s", name)
 			if r.Note != "" {
 				fmt.Println(r.Note)
 			}

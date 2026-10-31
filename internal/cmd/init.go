@@ -150,7 +150,7 @@ func (a *app) init(args []string) error {
 	if err := syncSkill(); err != nil {
 		return err
 	}
-	fmt.Println("Installed the gofer skill for Claude Code on this machine")
+	done("Installed the gofer skill for Claude Code on this machine")
 	linger, err := transport.Call(client, core.Linger, struct{}{})
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func (a *app) init(args []string) error {
 	if !allOK {
 		return exitCode{1, "Setup finished, but fix the FAIL checks above before using " + host}
 	}
-	fmt.Println("Ready. Try: gofer run <repo> \"<prompt>\"")
+	done("Ready. Try: gofer run <repo> \"<prompt>\"")
 	return nil
 }
 
@@ -192,7 +192,7 @@ func setUpBox(c *transport.Client, yes bool) (loggedIn bool, err error) {
 	if err := c.Upgrade(); err != nil {
 		return false, fmt.Errorf("couldn't install gofer on %s: %w", c.Host, err)
 	}
-	fmt.Println("Installed gofer on", c.Host)
+	done("Installed gofer on %s", c.Host)
 	return loggedIn, nil
 }
 
@@ -318,15 +318,15 @@ func (a *app) uninstall(cfg *config.Config, host string) error {
 func printChecks(checks []core.Check) bool {
 	allOK := true
 	for _, c := range checks {
-		mark := "ok  "
+		kind := "ok"
 		switch {
 		case c.Optional:
-			mark = "note"
+			kind = "note"
 		case !c.OK:
-			mark = "FAIL"
+			kind = "FAIL"
 			allOK = false
 		}
-		fmt.Printf("%s %s", mark, c.Name)
+		fmt.Printf("%s %s", checkMark(kind), c.Name)
 		if c.Detail != "" {
 			fmt.Printf(": %s", c.Detail)
 		}

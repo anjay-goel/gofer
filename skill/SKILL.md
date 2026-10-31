@@ -13,6 +13,8 @@ Run `gofer ls` at the start of any session that touches dev box work, so you see
 
 A `*` marks an agent with news. There is no finished state: an agent that finished its turn shows as `idle`, with `turn finished` under CHANGED.
 
+Gofer is already set up and this page covers its commands, so go straight to `gofer run`. Don't run `gofer doctor` or `--help`, read gofer's config, or SSH in to check things first. `gofer run` checks the repo itself and refuses within seconds, and it changes nothing when it does. Use `gofer doctor` only after an error you can't act on.
+
 ## When to delegate
 
 - Use gofer for long jobs, work that needs the dev box, and anything that should outlive this session.
@@ -39,7 +41,7 @@ An agent only knows what you send it. It can't see this conversation or this lap
 
 Agents run in `auto` mode. Only pass `--bypass` when the user asks for it.
 
-`gofer run` refuses a repo Claude doesn't trust yet, so tell the user to run `claude` there once on the dev box. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
+`gofer run` refuses a repo Claude doesn't trust yet. Don't start the agent in a parent folder instead, because it would lose the repo's CLAUDE.md and project settings. Stop and give the user this command to run once, then retry: `ssh -t <host> 'cd <path> && claude'`. It also refuses a `--name` that an agent, an `agent/<name>` branch or a worktree folder already has, so pick another. Names use lowercase letters, digits, dots, dashes or underscores, up to 48 characters.
 
 ## Waiting
 

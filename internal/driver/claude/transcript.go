@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,6 +14,14 @@ import (
 
 	"github.com/anjay-goel/gofer/internal/core"
 )
+
+const (
+	toolClip   = 120
+	peerPrefix = "Another Claude session sent a message:"
+	peerSuffix = "This came from another Claude session"
+)
+
+var toolFields = []string{"command", "file_path", "pattern", "query", "sql", "url", "prompt", "description"}
 
 func (d *Driver) transcriptPath(sessionID string) string {
 	matches, _ := filepath.Glob(filepath.Join(d.home, ".claude", "projects", "*", sessionID+".jsonl"))
@@ -152,7 +159,7 @@ func parseEntries(line []byte) []core.LogLine {
 	}
 	var text string
 	if json.Unmarshal(row.Message.Content, &text) == nil {
-		if strings.TrimSpace(text) == "" {
+		if hiddenText(text) {
 			return nil
 		}
 		return []core.LogLine{{Role: row.Type, Text: text}}
@@ -170,14 +177,44 @@ func parseEntries(line []byte) []core.LogLine {
 	for _, b := range blocks {
 		switch b.Type {
 		case "text":
-			if strings.TrimSpace(b.Text) != "" {
+			if !hiddenText(b.Text) {
 				out = append(out, core.LogLine{Role: row.Type, Text: b.Text})
 			}
 		case "tool_use":
-			out = append(out, core.LogLine{Role: "tool", Text: fmt.Sprintf("%s %s", b.Name, clip(string(b.Input), 120))})
+			out = append(out, core.LogLine{Role: "tool", Text: toolLine(b.Name, b.Input)})
 		}
 	}
 	return out
+}
+
+func UnwrapPeer(text string) string {
+	body, ok := strings.CutPrefix(strings.TrimSpace(text), peerPrefix)
+	if !ok {
+		return text
+	}
+	if end := strings.LastIndex(body, peerSuffix); end >= 0 {
+		body = body[:end]
+	}
+	return strings.TrimSpace(body)
+}
+
+func hiddenText(text string) bool {
+	text = strings.TrimSpace(text)
+	return text == "" || strings.HasPrefix(text, "<task-notification>")
+}
+
+func toolLine(name string, input json.RawMessage) string {
+	if parts := strings.SplitN(name, "__", 3); len(parts) == 3 && parts[0] == "mcp" {
+		name = parts[1] + " " + parts[2]
+	}
+	var fields map[string]any
+	json.Unmarshal(input, &fields)
+	for _, key := range toolFields {
+		if value, ok := fields[key].(string); ok && value != "" {
+			return name + "  " + clip(value, toolClip)
+		}
+	}
+	return name + "  " + clip(string(input), toolClip)
 }
 
 func clip(s string, n int) string {

@@ -83,12 +83,13 @@ If the connection drops during `gofer run`, it retries with the same request ID,
 
 ## Good to know
 
+- Output uses colour and symbols in a terminal. It stays plain when piped, when `NO_COLOR` is set, or when `TERM` is `dumb`.
 - Agents run in `auto` mode. `--bypass` skips permission checks and accepts messages from other sessions, so use it only for work you trust.
 - Agents only know what you send them. They can read anything your user can read on the dev box.
 - A message can't approve a permission prompt or answer a question dialog, so `gofer send` refuses while an agent is blocked. Attach to clear it. An agent that ended its turn with a question in its reply isn't blocked, so answer that with `gofer send`.
 - `claude daemon stop --any` ends running agents. `gofer wait` reports them as cut short, and `gofer send` wakes them again, but interrupted work doesn't finish by itself.
 - Sessions started from the phone show as `phone` in `gofer ls`. They can be messaged, but not attached or removed with gofer.
-- `gofer run` prints a `web:` link when Claude has linked the session to claude.ai/code. Push notifications, waking an agent from the phone, and phone sync without Remote Control on the dev box are untested.
+- `gofer run` prints a `follow` link when Claude has linked the session to claude.ai/code. Push notifications, waking an agent from the phone, and phone sync without Remote Control on the dev box are untested.
 
 ## How it works
 
