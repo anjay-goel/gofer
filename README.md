@@ -59,27 +59,78 @@ Gofer sends your exact HEAD to the dev box, creates `agent/<name>` from it, and 
 
 | Command | What it does |
 | --- | --- |
-| `gofer run <repo> "<prompt>"` | Start an agent. Options: `--name`, `--doc`, `--worktree`, `--allow-dirty`, `--model`, `--effort` (`low`, `medium`, `high`, `xhigh` or `max`), `--bypass`, `--json`. Put `--` before prompt text that starts with a dash |
-| `gofer ls` | Show gofer's agents and any other live Claude sessions on the dev box. `*` marks an agent with news since this laptop last looked, and CHANGED shows its latest event. SOURCE is `gofer`, `bg`, `tui` or `phone`. `--peek` leaves them unseen, and `--json` prints JSON |
-| `gofer logs <name>` | Show recent conversation and tool calls. `-n` sets how many entries, 30 by default, and `-n 0` shows them all |
-| `gofer wait <name>...` | Exit when an agent is blocked or all finish, and show each one's work since your last message. Long work is trimmed, and `gofer logs` has the rest. `--timeout <seconds>` sets a limit, and `--json` prints JSON. Reconnects after a dropped connection, outlasts a failed `claude agents` call, and uses no tokens. Stops if SSH login itself fails |
-| `gofer send <name> "<msg>"` | Message an agent, and confirm it landed. A running or idle agent gets it on its inbox socket, and a stopped or failed one is woken with it. Refuses to wake an agent whose folder is gone |
-| `gofer attach <name>` | Open the full TUI. Ctrl+Z detaches. `--rex` opens a Rex tab, and falls back to SSH if that fails. `--ssh` uses SSH when Rex is your default |
-| `gofer cp <file> <name>:` | Copy files or folders to an agent. `gofer cp <name>:<path> <local>` copies them back. Relative remote paths start in the agent's folder |
-| `gofer stop <name>` | Stop an agent and keep its conversation. Says so if it was already stopped |
-| `gofer rm <name>` | Remove an agent and its worktree. The branch stays. Refuses over uncommitted or unfetched work unless you pass `--force`, so run it from the repo you fetched into. It only removes agents gofer started. A record gofer can't read goes only with `--force`, which leaves its worktree and session unchecked |
-| `gofer doctor` | Check the setup. `--live` runs a small test agent in the root folder, so that folder must be trusted |
-| `gofer version` | Print the version |
+| `gofer run <repo> "<prompt>"` | Start an agent |
+| `gofer ls` | See agents and live sessions |
+| `gofer logs <name>` | Read the conversation |
+| `gofer wait <name>...` | Block until finished or stuck |
+| `gofer send <name> "<msg>"` | Message or wake an agent |
+| `gofer attach <name>` | Open the full TUI, Ctrl+Z detaches |
+| `gofer cp <file> <name>:` | Copy files to an agent |
+| `gofer cp <name>:<path> <local>` | Copy files back |
+| `gofer stop <name>` | Stop it, keep the conversation |
+| `gofer rm <name>` | Remove it and its worktree, keep the branch |
+| `gofer doctor` | Check the setup |
 
-`<name>` can be an agent name, a session's Claude name, a job ID, or the first 8 or more characters of a session ID.
+<details>
+<summary><b>Options</b></summary>
 
-`STATE` is `running`, `idle`, `blocked`, `stopped`, `failed` or `unknown`. An agent that finished its turn shows as `idle`, or as `stopped` once Claude ends the session.
+<br>
 
-Add `--host <host>` to any command, or set `GOFER_HOST`, to use a dev box other than the default. With `gofer send`, put `--host` before the message, because everything after the message starts is part of it. Put `--` before a message that starts with `--host`.
+| Command | Option | Effect |
+| --- | --- | --- |
+| `run` | `--name <name>` | Name the agent |
+| | `--doc <file>` | Send a UTF-8 handoff document |
+| | `--worktree` | Hand off your HEAD on a new branch |
+| | `--allow-dirty` | Hand off despite uncommitted changes |
+| | `--model`, `--effort` | Pass through to Claude. Effort is `low`, `medium`, `high`, `xhigh` or `max` |
+| | `--bypass` | Skip permission checks |
+| `ls` | `--peek` | Leave news marked as unseen |
+| `logs` | `-n <count>` | Entries to show. 30 by default, `0` for all |
+| `wait` | `--timeout <seconds>` | Stop waiting after this long |
+| `attach` | `--rex`, `--ssh` | Choose Rex or SSH. Rex falls back to SSH |
+| `rm` | `--force` | Remove despite uncommitted or unfetched work |
+| `doctor` | `--live` | Run a small test agent in the root folder |
+| Any | `--host <host>` | Use another dev box, or set `GOFER_HOST` |
+| `run`, `ls`, `wait` | `--json` | Print JSON |
 
-`gofer wait` exits 0 when every agent finished its turn, 2 when one is blocked, 4 when one failed or was cut short, 3 when an idle agent's turn can't be confirmed finished, and 124 on `--timeout`. If several apply, the first of 2, 4 and 3 wins. `gofer send` exits 3 when it can't confirm delivery. Other errors exit 1.
+- Put `--` before prompt text that starts with a dash.
+- With `gofer send`, put `--host` before the message.
 
-If the connection drops during `gofer run`, it retries with the same request ID, so the dev box returns the agent it already started instead of starting another. If the retries run out, or the connection drops during `gofer send`, the action may still have happened, so check `gofer ls` or `gofer logs` before running it again. If Claude may have started an agent but gofer can't confirm it, `gofer run` reports that and keeps the agent's record.
+</details>
+
+<details>
+<summary><b>Exit codes</b></summary>
+
+<br>
+
+| Code | `gofer wait` | `gofer send` |
+| --- | --- | --- |
+| 0 | Every agent finished its turn | Delivered |
+| 1 | Error | Error |
+| 2 | An agent is blocked | |
+| 3 | An idle agent's turn can't be confirmed finished | Delivery can't be confirmed |
+| 4 | An agent failed or was cut short | |
+| 124 | `--timeout` ran out | |
+
+If several apply to `wait`, the first of 2, 4 and 3 wins.
+
+</details>
+
+<details>
+<summary><b>Names, states and lost connections</b></summary>
+
+<br>
+
+- **`<name>`** can be an agent name, a session's Claude name, a job ID, or the first 8 or more characters of a session ID.
+- **`STATE`** is `running`, `idle`, `blocked`, `stopped`, `failed` or `unknown`. A finished agent shows as `idle`, or `stopped` once Claude ends the session.
+- **`SOURCE`** is `gofer`, `bg`, `tui` or `phone`. In `gofer ls`, `*` marks news since this laptop last looked.
+- **`gofer cp`** starts relative remote paths in the agent's folder.
+- **`gofer wait`** trims long work, so `gofer logs` has the rest. It reconnects after a dropped connection, uses no tokens, and stops if SSH login fails.
+- **`gofer send`** refuses to wake an agent whose folder is gone.
+- **`gofer rm`** only removes agents gofer started, so run it from the repo you fetched into. A record gofer can't read goes only with `--force`, which leaves its worktree and session unchecked.
+- **Lost connections:** `gofer run` retries with the same request ID, so it can't start a second agent. If retries run out, or the connection drops during `gofer send`, the action may still have happened, so check `gofer ls` or `gofer logs` first. If gofer can't confirm a start, it says so and keeps the record.
+
+</details>
 
 <details>
 <summary><b>Setup details</b></summary>
