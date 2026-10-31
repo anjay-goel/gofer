@@ -125,6 +125,7 @@ func (s *Server) record(t target, kind store.EventKind, token string) {
 		a.LastInput = time.Now().UTC()
 		a.LastToken = token
 		a.Failure = ""
+		a.Summary = ""
 	})
 	s.Store.Append(t.agent.Name, store.Event{Kind: kind})
 }

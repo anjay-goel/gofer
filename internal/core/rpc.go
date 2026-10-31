@@ -36,7 +36,8 @@ const (
 	Run       Method[RunParams, View]              = "run"
 	List      Method[ListParams, []View]           = "ls"
 	Wait      Method[WaitParams, WaitResult]       = "wait"
-	Logs      Method[LogsParams, []LogLine]        = "logs"
+	Logs      Method[LogsParams, LogsResult]       = "logs"
+	Follow    Method[FollowParams, FollowResult]   = "follow"
 	Send      Method[SendParams, SendResult]       = "send"
 	Stop      Method[NameParams, StopResult]       = "stop"
 	Remove    Method[RemoveParams, RemoveResult]   = "rm"
@@ -79,6 +80,7 @@ type ListParams struct {
 type WaitParams struct {
 	Names   []string `json:"names"`
 	Timeout int      `json:"timeout"`
+	Any     bool     `json:"any,omitempty"`
 }
 
 type WaitResult struct {
@@ -103,6 +105,24 @@ type StopResult struct {
 type LogsParams struct {
 	Name  string `json:"name"`
 	Limit int    `json:"limit"`
+}
+
+type LogsResult struct {
+	Lines  []LogLine `json:"lines"`
+	Cursor int64     `json:"cursor"`
+	Link   string    `json:"link,omitempty"`
+}
+
+type FollowParams struct {
+	Name    string `json:"name"`
+	Cursor  int64  `json:"cursor"`
+	Timeout int    `json:"timeout"`
+}
+
+type FollowResult struct {
+	Lines  []LogLine  `json:"lines"`
+	Cursor int64      `json:"cursor"`
+	Wait   WaitResult `json:"wait"`
 }
 
 type SendParams struct {

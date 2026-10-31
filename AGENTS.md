@@ -22,7 +22,10 @@ make install
 - Keep types that cross SSH in `internal/core`. `internal/store` imports no other internal package.
 - Never use `claude -p` or the Agent SDK. Agents are `claude --bg` sessions.
 - Never change the user's SSH config. Hooks go in per session through `--settings`. The only Claude values gofer writes are `hasTrustDialogAccepted` for folders under the working directory, and `skipDangerousModePermissionPrompt` when someone passes `--bypass`, both through `internal/driver/claude/config.go`. `gofer doctor --live` removes its throwaway folder's entry afterwards.
-- Colour and symbols appear only through `internal/cmd/style.go`, and output stays plain when it isn't going to a terminal.
+- Colour, symbols and terminal escape codes appear only through `internal/cmd/style.go` and `prompt.go`, and output stays plain when it isn't going to a terminal.
+- Keep `gofer ls` fast: nothing per row may scan a whole transcript. Summaries come from the `Stop` hook, with a bounded tail read as the fallback.
+- Tab completion stays local. `gofer __complete` reads the config and the names `gofer ls` caches, and never opens SSH.
+- No daemons, and connections go laptop to box only. Waiting is a long poll over SSH with a cursor, so a dropped connection loses nothing.
 - Fix root causes rather than adding retries or special cases.
 
 ## Docs
@@ -36,4 +39,4 @@ Update these with any change a user or agent would notice:
 
 Unit tests use a fake `claude` on `PATH`. They can't prove Claude's real behaviour, so check changes to the driver, send, wait or hooks on a real dev box with `gofer doctor --live` and a short agent using `--model haiku`.
 
-On a real dev box, use throwaway folders, remove test agents afterwards, and leave existing sessions and services alone.
+On a real dev box, use throwaway folders, remove test agents afterwards, and leave existing sessions and services alone. Never script keys into an interactive `claude`: first-run dialogs take them and write to the user's settings.

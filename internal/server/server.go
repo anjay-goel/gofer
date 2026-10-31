@@ -1,21 +1,27 @@
 package server
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/anjay-goel/gofer/internal/core"
 	"github.com/anjay-goel/gofer/internal/driver/claude"
+	"github.com/anjay-goel/gofer/internal/proc"
 	"github.com/anjay-goel/gofer/internal/store"
 )
 
 const (
 	pollInterval = 4 * time.Second
 	workLimit    = 32000
+	countLimit   = 5 * time.Second
+	followPoll   = time.Second
+	followChecks = 4
 )
 
 type Server struct {
@@ -97,9 +103,14 @@ func (s *Server) list(p core.ListParams) ([]core.View, error) {
 	for _, a := range agents {
 		known[a.SessionID] = true
 		v := s.view(snap.target(a), now)
+		v.Commits = commitCount(a)
+		if v.Summary == "" && v.Settled && !v.Stuck() {
+			v.Summary = s.Driver.LastReply(a.SessionID)
+		}
 		events, _ := s.Store.Events(a.Name)
 		if n := len(events); n > 0 {
 			v.Changed = describe(events[n-1], now)
+			v.Ago = ago(events[n-1].Time, now)
 			if p.Client != "" {
 				v.New = n > s.Store.Seen(a.Name, p.Client)
 				if !p.Peek {
@@ -110,15 +121,38 @@ func (s *Server) list(p core.ListParams) ([]core.View, error) {
 		views = append(views, v)
 	}
 	for _, u := range unreadable {
-		views = append(views, core.View{Name: u.Name, State: core.StateUnknown, Detail: u.Err.Error(), Source: "gofer"})
+		views = append(views, core.View{
+			Name: u.Name, State: core.StateUnknown, Detail: u.Err.Error(), Source: "gofer",
+			Next: "gofer rm " + u.Name + " --force",
+		})
 	}
+	foreign := []core.View{}
 	for _, sess := range snap.list {
 		if known[sess.SessionID] || sess.SessionID == "" || sess.Phase().Ended() {
 			continue
 		}
-		views = append(views, s.view(foreignTarget(sess), now))
+		foreign = append(foreign, s.view(foreignTarget(sess), now))
 	}
+	slices.SortStableFunc(foreign, func(a, b core.View) int { return cmp.Compare(a.Name, b.Name) })
+	views = append(views, foreign...)
+	slices.SortStableFunc(views, func(a, b core.View) int { return cmp.Compare(a.Rank(), b.Rank()) })
 	return views, nil
+}
+
+func commitCount(a store.Agent) *int {
+	if a.Branch == "" || a.Base == "" {
+		return nil
+	}
+	span := a.Base + "..refs/heads/" + a.Branch
+	out, err := proc.Cmd{Name: "git", Args: []string{"rev-list", "--count", span}, Dir: a.Repo, Limit: countLimit}.Output()
+	if err != nil {
+		return nil
+	}
+	count, err := strconv.Atoi(out)
+	if err != nil {
+		return nil
+	}
+	return &count
 }
 
 func (s *Server) work(sessionID string) []core.LogLine {
@@ -174,7 +208,22 @@ func (s *Server) blockReason(t target, fallback string) string {
 	return last.Detail
 }
 
-func (s *Server) waitPass(names []string) (core.WaitResult, error) {
+func tally(result *core.WaitResult, v core.View) {
+	if v.State == core.StateBlocked {
+		result.Blocked = true
+	}
+	if v.State == core.StateFailed || v.Cut {
+		result.Failed = true
+	}
+	if v.Unconfirmed {
+		result.Unconfirmed = true
+	} else if !v.Settled {
+		result.Finished = false
+	}
+	result.Views = append(result.Views, v)
+}
+
+func (s *Server) waitPass(names []string, first bool) (core.WaitResult, error) {
 	snap, err := s.snapshot()
 	if err != nil {
 		return core.WaitResult{Trouble: "can't read claude's agent list: " + err.Error()}, nil
@@ -191,18 +240,14 @@ func (s *Server) waitPass(names []string) (core.WaitResult, error) {
 		}
 		v := s.view(t, now)
 		if v.State == core.StateBlocked {
-			result.Blocked = true
 			v.Detail = s.blockReason(t, v.Detail)
 		}
-		if v.State == core.StateFailed || v.Cut {
-			result.Failed = true
+		if first && v.Returned() {
+			result = core.WaitResult{Finished: true}
+			tally(&result, v)
+			return result, nil
 		}
-		if v.Unconfirmed {
-			result.Unconfirmed = true
-		} else if !v.Settled {
-			result.Finished = false
-		}
-		result.Views = append(result.Views, v)
+		tally(&result, v)
 	}
 	return result, nil
 }
@@ -210,7 +255,7 @@ func (s *Server) waitPass(names []string) (core.WaitResult, error) {
 func (s *Server) wait(p core.WaitParams) (core.WaitResult, error) {
 	deadline := time.Now().Add(time.Duration(p.Timeout) * time.Second)
 	for {
-		result, err := s.waitPass(p.Names)
+		result, err := s.waitPass(p.Names, p.Any)
 		if err != nil {
 			return result, err
 		}
@@ -228,21 +273,54 @@ func (s *Server) wait(p core.WaitParams) (core.WaitResult, error) {
 	}
 }
 
-func (s *Server) logs(p core.LogsParams) ([]core.LogLine, error) {
+func (s *Server) logs(p core.LogsParams) (core.LogsResult, error) {
+	var result core.LogsResult
 	t, err := s.locate(p.Name)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	if err := t.requireSession(p.Name); err != nil {
-		return nil, err
+		return result, err
 	}
-	lines, err := s.Driver.Transcript(t.agent.SessionID, p.Limit)
+	lines, cursor, err := s.Driver.TranscriptFrom(t.agent.SessionID, 0)
+	if p.Limit > 0 && len(lines) > p.Limit {
+		lines = lines[len(lines)-p.Limit:]
+	}
+	return core.LogsResult{Lines: cleanLines(lines), Cursor: cursor, Link: s.link(t)}, err
+}
+
+func (s *Server) follow(p core.FollowParams) (core.FollowResult, error) {
+	deadline := time.Now().Add(time.Duration(p.Timeout) * time.Second)
+	result := core.FollowResult{Cursor: p.Cursor}
+	for tick := 0; ; tick++ {
+		if tick%followChecks == 0 {
+			pass, err := s.waitPass([]string{p.Name}, false)
+			if err != nil {
+				return result, err
+			}
+			result.Wait = pass
+		}
+		if len(result.Wait.Views) == 1 {
+			lines, next, err := s.Driver.TranscriptFrom(result.Wait.Views[0].ID, p.Cursor)
+			if err != nil {
+				return result, err
+			}
+			result.Lines, result.Cursor = cleanLines(lines), next
+		}
+		if result.Wait.Done() || len(result.Lines) > 0 || !time.Now().Before(deadline) {
+			return result, nil
+		}
+		time.Sleep(followPoll)
+	}
+}
+
+func cleanLines(lines []core.LogLine) []core.LogLine {
 	for i, l := range lines {
 		if l.Role == "user" {
 			lines[i].Text = cleanInput(l.Text)
 		}
 	}
-	return lines, err
+	return lines
 }
 
 func cleanInput(text string) string {

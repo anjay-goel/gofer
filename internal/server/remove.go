@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/anjay-goel/gofer/internal/core"
 	"github.com/anjay-goel/gofer/internal/store"
@@ -25,6 +26,15 @@ func (s *Server) remove(p core.RemoveParams) (core.RemoveResult, error) {
 		return result, fmt.Errorf("%s wasn't started by gofer, so remove it with claude rm", p.Name)
 	}
 	a := t.agent
+	if !p.Force {
+		v := s.view(t, time.Now().UTC())
+		if v.State == core.StateBlocked {
+			return result, fmt.Errorf("%s is blocked. Stop it with gofer stop %s, or use --force", a.Name, a.Name)
+		}
+		if v.Working() {
+			return result, fmt.Errorf("%s is running. Stop it with gofer stop %s, or use --force", a.Name, a.Name)
+		}
+	}
 	if a.Branch != "" && !p.Force {
 		if result.Unfetched, err = checkWork(a, p.FetchedHead); err != nil || result.Unfetched != "" {
 			return result, err

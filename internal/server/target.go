@@ -84,9 +84,28 @@ func (t target) requireSession(name string) error {
 }
 
 func (s *Server) view(t target, now time.Time) core.View {
-	if !t.managed() {
-		return s.foreignView(t.sess)
+	var v core.View
+	if t.managed() {
+		v = s.agentView(t, now)
+	} else {
+		v = s.foreignView(t.sess)
 	}
+	v.Next = v.NextStep()
+	return v
+}
+
+func (s *Server) link(t target) string {
+	if !t.listed || t.sess.PID <= 0 {
+		return ""
+	}
+	rec, err := s.Driver.Record(t.sess.PID)
+	if err != nil {
+		return ""
+	}
+	return rec.Link()
+}
+
+func (s *Server) agentView(t target, now time.Time) core.View {
 	a := t.agent
 	state := t.state()
 	detail := t.sess.WaitingFor
@@ -98,16 +117,11 @@ func (s *Server) view(t target, now time.Time) core.View {
 	v := core.View{
 		Name: a.Name, ID: a.SessionID, State: state, Detail: detail,
 		Source: "gofer", Dir: a.Dir, Branch: a.Branch,
-		Settled: settled, Unconfirmed: unconfirmed,
+		Settled: settled, Unconfirmed: unconfirmed, Summary: a.Summary, Link: s.link(t),
 		Cut: state == core.StateStopped && !s.turnEnded(a),
 	}
 	if t.listed && t.sess.Cwd != "" {
 		v.Dir = t.sess.Cwd
-	}
-	if t.listed && t.sess.PID > 0 {
-		if rec, err := s.Driver.Record(t.sess.PID); err == nil {
-			v.Link = rec.Link()
-		}
 	}
 	return v
 }

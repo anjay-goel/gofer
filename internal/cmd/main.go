@@ -20,8 +20,8 @@ Start and follow:
   gofer run <dir> "<prompt>" [--name n] [--model m] [--effort e] [--bypass] [--json]
   gofer run <dir> --doc plan.md --worktree [--name n] [--allow-dirty] [--json]
   gofer ls [--peek] [--json]
-  gofer logs <name> [-n lines]
-  gofer wait <name>... [--timeout seconds] [--json]
+  gofer logs <name> [-n lines] [-f]
+  gofer wait <name>... [--any] [--notify] [--timeout seconds] [--json]
 
 Interact and manage:
   gofer send <name> "<message>"
@@ -29,12 +29,14 @@ Interact and manage:
   gofer cp <local> <name>:[path]
   gofer cp <name>:<path> <local>
   gofer stop <name>
-  gofer rm <name> [--force]
+  gofer rm <name>... [--force]
+  gofer rm --finished
 
 Set up:
   gofer init [host] [--workdir dir] [--terminal ssh|rex] [--yes]
   gofer init --remove [host]
   gofer doctor [--live]
+  gofer completion bash|zsh|fish
   gofer version
 
 Use --host <host> or GOFER_HOST with any command to pick a dev box other than
@@ -94,6 +96,11 @@ func Main(version string, args []string) int {
 		}
 		fmt.Print(styledHelp(text))
 		return 0
+	case "__complete":
+		printCompletions(rest)
+		return 0
+	case "completion":
+		err = completion(rest)
 	case "init":
 		err = a.init(rest)
 	case "run":

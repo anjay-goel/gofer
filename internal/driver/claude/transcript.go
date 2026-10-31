@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,9 +17,11 @@ import (
 )
 
 const (
-	toolClip   = 120
-	peerPrefix = "Another Claude session sent a message:"
-	peerSuffix = "This came from another Claude session"
+	toolClip     = 120
+	summaryLimit = 240
+	replyTail    = 256 * 1024
+	peerPrefix   = "Another Claude session sent a message:"
+	peerSuffix   = "This came from another Claude session"
 )
 
 var toolFields = []string{"command", "file_path", "pattern", "query", "sql", "url", "prompt", "description"}
@@ -36,21 +39,44 @@ func (d *Driver) transcriptPath(sessionID string) string {
 	return best
 }
 
-func (d *Driver) scan(sessionID string, fn func([]byte)) error {
+func (d *Driver) scanFrom(sessionID string, offset int64, fn func([]byte)) (int64, error) {
 	f, err := os.Open(d.transcriptPath(sessionID))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return offset, nil
 	}
 	if err != nil {
-		return err
+		return offset, err
 	}
 	defer f.Close()
-	scan := bufio.NewScanner(f)
-	scan.Buffer(make([]byte, 0, 1024*1024), 64*1024*1024)
-	for scan.Scan() {
-		fn(scan.Bytes())
+	info, err := f.Stat()
+	if err != nil {
+		return offset, err
 	}
-	return scan.Err()
+	offset = min(offset, info.Size())
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return offset, err
+	}
+	read := bufio.NewReaderSize(f, 1024*1024)
+	for {
+		line, err := read.ReadBytes('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return offset, err
+		}
+		if err == nil || json.Valid(line) {
+			offset += int64(len(line))
+			if row := bytes.TrimSpace(line); len(row) > 0 {
+				fn(row)
+			}
+		}
+		if err != nil {
+			return offset, nil
+		}
+	}
+}
+
+func (d *Driver) scan(sessionID string, fn func([]byte)) error {
+	_, err := d.scanFrom(sessionID, 0, fn)
+	return err
 }
 
 func (d *Driver) TranscriptHas(sessionID, token string) (bool, error) {
@@ -61,15 +87,61 @@ func (d *Driver) TranscriptHas(sessionID, token string) (bool, error) {
 	return found, err
 }
 
-func (d *Driver) Transcript(sessionID string, limit int) ([]core.LogLine, error) {
+func (d *Driver) TranscriptFrom(sessionID string, offset int64) ([]core.LogLine, int64, error) {
 	var out []core.LogLine
-	err := d.scan(sessionID, func(line []byte) {
+	next, err := d.scanFrom(sessionID, offset, func(line []byte) {
 		out = append(out, parseEntries(line)...)
 	})
-	if limit > 0 && len(out) > limit {
-		out = out[len(out)-limit:]
+	return out, next, err
+}
+
+func (d *Driver) LastReply(sessionID string) string {
+	f, err := os.Open(d.transcriptPath(sessionID))
+	if err != nil {
+		return ""
 	}
-	return out, err
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	start := max(info.Size()-replyTail, 0)
+	tail := make([]byte, info.Size()-start)
+	if _, err := f.ReadAt(tail, start); err != nil {
+		return ""
+	}
+	lines := bytes.Split(tail, []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		entries := parseEntries(lines[i])
+		for j := len(entries) - 1; j >= 0; j-- {
+			switch entries[j].Role {
+			case "assistant":
+				return Summary(entries[j].Text)
+			case "user":
+				return ""
+			}
+		}
+	}
+	return ""
+}
+
+func Summary(reply string) string {
+	heading := ""
+	for _, raw := range strings.Split(reply, "\n") {
+		line := core.OneLine(strings.ReplaceAll(raw, "**", ""))
+		text := strings.TrimSpace(strings.TrimLeft(line, "#>"))
+		text = strings.TrimPrefix(strings.TrimPrefix(text, "- "), "* ")
+		if text == "" || strings.HasPrefix(text, "```") || strings.Trim(text, "-=_*") == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "#") {
+			return clip(text, summaryLimit)
+		}
+		if heading == "" {
+			heading = text
+		}
+	}
+	return clip(heading, summaryLimit)
 }
 
 func (d *Driver) TranscriptSince(sessionID string, tokenTag *regexp.Regexp) ([]core.LogLine, error) {

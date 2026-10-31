@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -100,7 +101,7 @@ func (c *Client) exec(limit time.Duration, stdin io.Reader, script string) (stdo
 	stdout, stderr, err = cmd.Run()
 	var exit proc.ExitError
 	if errors.As(err, &exit) && exit.Code == 255 {
-		return stdout, stderr, NetworkError{Detail: strings.TrimRight(strings.TrimSpace(stderr), ".")}
+		return stdout, stderr, NetworkError{Detail: cmp.Or(strings.TrimRight(strings.TrimSpace(stderr), "."), "the connection dropped")}
 	}
 	return stdout, stderr, err
 }

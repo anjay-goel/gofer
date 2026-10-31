@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -30,6 +31,11 @@ const (
 	runAttempts   = 5
 	localGitLimit = time.Hour
 	logIndent     = 8
+	detailClip    = 40
+	summaryClip   = 100
+	summaryMin    = 16
+	alertClip     = 80
+	alertLimit    = 5 * time.Second
 )
 
 var runRetryDelay = 5 * time.Second
@@ -175,6 +181,7 @@ func (a *app) ls(args []string) error {
 	if err != nil {
 		return err
 	}
+	saveNames(a.host, views)
 	if *asJSON {
 		return printJSON(views)
 	}
@@ -182,27 +189,131 @@ func (a *app) ls(args []string) error {
 		fmt.Println("No agents on", a.host)
 		return nil
 	}
-	fmt.Print(agentTable(views))
+	fmt.Print(agentTable(views, terminalWidth()))
 	return nil
 }
 
-func agentTable(views []core.View) string {
-	branches := slices.ContainsFunc(views, func(v core.View) bool { return v.Branch != "" })
-	row := func(name, state, changed, branch, source cell) []cell {
-		cells := []cell{name, state, changed}
-		if branches {
-			cells = append(cells, branch)
-		}
-		return append(cells, source)
+type column struct {
+	title string
+	cells []cell
+}
+
+func (c column) width() int {
+	width := displayWidth(c.title)
+	for _, cl := range c.cells {
+		width = max(width, displayWidth(cl.text))
 	}
-	header := func(title string) cell { return cell{title, dim} }
-	rows := [][]cell{row(header("NAME"), header("STATE"), header("CHANGED"), header("BRANCH"), header("SOURCE"))}
+	return width
+}
+
+func (c column) blank() bool {
+	return !slices.ContainsFunc(c.cells, func(cl cell) bool {
+		return cl.text != "" && (c.title != "SOURCE" || cl.text != "gofer")
+	})
+}
+
+func commitWord(count *int) string {
+	switch {
+	case count == nil:
+		return ""
+	case *count == 1:
+		return "1 commit"
+	}
+	return fmt.Sprintf("%d commits", *count)
+}
+
+func summaryText(v core.View) string {
+	if v.Stuck() && v.Next != "" {
+		return "Run " + v.Next
+	}
+	return v.Summary
+}
+
+func agentColumns(views []core.View) []column {
+	columns := []column{{title: "NAME"}, {title: "STATE"}, {title: "CHANGED"}, {title: "COMMITS"}, {title: "BRANCH"}, {title: "SOURCE"}, {title: "SUMMARY"}}
 	for _, v := range views {
 		name := cell{v.Name, bold}
 		if v.New {
 			name.text += "*"
 		}
-		rows = append(rows, row(name, stateCell(v), cell{v.Changed, dim}, cell{v.Branch, ""}, cell{v.Source, dim}))
+		row := []cell{
+			name, stateCell(v, detailClip), {v.Ago, dim}, {commitWord(v.Commits), ""}, {v.Branch, ""}, {v.Source, dim},
+			{clipWidth(summaryText(v), summaryClip), ""},
+		}
+		for i, c := range row {
+			columns[i].cells = append(columns[i].cells, c)
+		}
+	}
+	return columns
+}
+
+func removeColumn(columns []column, title string) []column {
+	return slices.DeleteFunc(columns, func(c column) bool { return c.title == title })
+}
+
+func tableWidth(columns []column, summary int) int {
+	width := (len(columns) - 1) * columnGap
+	for _, c := range columns {
+		if c.title == "SUMMARY" {
+			width += min(c.width(), summary)
+		} else {
+			width += c.width()
+		}
+	}
+	return width
+}
+
+func shrink(columns []column, title string, by int) int {
+	for i, c := range columns {
+		if c.title != title {
+			continue
+		}
+		size := max(c.width()-by, 1)
+		used := c.width() - size
+		columns[i].title = clipWidth(c.title, size)
+		columns[i].cells = make([]cell, len(c.cells))
+		for j, cl := range c.cells {
+			columns[i].cells[j] = cell{clipWidth(cl.text, size), cl.code}
+		}
+		return used
+	}
+	return 0
+}
+
+func fitColumns(columns []column, width int) []column {
+	columns = slices.DeleteFunc(columns, func(c column) bool {
+		return c.blank() && c.title != "NAME" && c.title != "STATE"
+	})
+	for _, title := range []string{"SOURCE", "BRANCH"} {
+		if tableWidth(columns, math.MaxInt) > width {
+			columns = removeColumn(columns, title)
+		}
+	}
+	for _, title := range []string{"COMMITS", "CHANGED", "SUMMARY"} {
+		if tableWidth(columns, summaryMin) > width {
+			columns = removeColumn(columns, title)
+		}
+	}
+	excess := tableWidth(columns, math.MaxInt) - width
+	for _, title := range []string{"SUMMARY", "STATE", "NAME"} {
+		if excess > 0 {
+			excess -= shrink(columns, title, excess)
+		}
+	}
+	return columns
+}
+
+func agentTable(views []core.View, width int) string {
+	columns := agentColumns(views)
+	if width > 0 {
+		columns = fitColumns(columns, width)
+	}
+	rows := make([][]cell, len(views)+1)
+	for _, c := range columns {
+		rows[0] = append(rows[0], cell{c.title, dim})
+		for i, cl := range c.cells {
+			rows[i+1] = append(rows[i+1], cl)
+		}
 	}
 	return table(rows)
 }
@@ -210,6 +321,7 @@ func agentTable(views []core.View) string {
 func (a *app) logs(args []string) error {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
 	limit := fs.Int("n", 30, "")
+	follow := fs.Bool("f", false, "")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
@@ -217,14 +329,34 @@ func (a *app) logs(args []string) error {
 	if len(pos) != 1 {
 		return errors.New("usage: gofer logs <name>")
 	}
-	stop := spinning("Reading " + pos[0])
-	lines, err := transport.Call(a.client, core.Logs, core.LogsParams{Name: pos[0], Limit: *limit})
+	name := pos[0]
+	stop := spinning("Reading " + name)
+	r, err := transport.Call(a.client, core.Logs, core.LogsParams{Name: name, Limit: *limit})
 	stop()
 	if err != nil {
 		return err
 	}
-	printLines(lines)
-	return nil
+	printLines(r.Lines)
+	if r.Link != "" {
+		printLines([]core.LogLine{{Role: "follow", Text: r.Link}})
+	}
+	if !*follow {
+		return nil
+	}
+	cursor := r.Cursor
+	last, err := a.longPoll("", time.Time{}, func(slice time.Duration) (core.WaitResult, error) {
+		params := core.FollowParams{Name: name, Cursor: cursor, Timeout: int(math.Ceil(slice.Seconds()))}
+		next, err := transport.CallWithin(a.client, slice+waitMargin, core.Follow, params)
+		if err == nil {
+			printLines(next.Lines)
+			cursor = next.Cursor
+		}
+		return next.Wait, err
+	})
+	if err != nil {
+		return err
+	}
+	return finishWait(last, false)
 }
 
 func printLines(lines []core.LogLine) {
@@ -243,11 +375,18 @@ func printLines(lines []core.LogLine) {
 	}
 }
 
-func stateLabel(v core.View) string {
-	if v.Detail == "" {
+func stateLabel(v core.View, limit int) string {
+	detail := v.Detail
+	if v.Cut {
+		detail = "cut short"
+	}
+	if detail == "" {
 		return string(v.State)
 	}
-	return fmt.Sprintf("%s (%s)", v.State, v.Detail)
+	if limit > 0 {
+		detail = clipWidth(core.OneLine(detail), limit)
+	}
+	return fmt.Sprintf("%s (%s)", v.State, detail)
 }
 
 func printWait(r core.WaitResult) {
@@ -255,18 +394,20 @@ func printWait(r core.WaitResult) {
 		if i > 0 {
 			fmt.Println()
 		}
-		state := stateCell(v)
-		switch {
-		case v.Cut:
-			state.text += ", cut short before finishing. Use gofer send to wake it"
-		case v.State == core.StateFailed:
-			state.text += ". Use gofer send to try again"
-		case v.Unconfirmed:
-			state.text += ", but its turn can't be confirmed finished, so this work may be stale. Check gofer logs " + v.Name
-		}
-		fmt.Printf("%s: %s\n", paint(bold, v.Name), state)
+		fmt.Printf("%s: %s\n", paint(bold, v.Name), waitState(v))
 		printLines(v.Work)
 	}
+}
+
+func waitState(v core.View) cell {
+	state := stateCell(v, 0)
+	switch {
+	case v.Stuck() && v.Next != "":
+		state.text += ". Run " + v.Next
+	case v.Unconfirmed:
+		state.text += ", but its turn can't be confirmed finished, so this work may be stale. Run " + v.Next
+	}
+	return state
 }
 
 func finishWait(r core.WaitResult, asJSON bool) error {
@@ -288,10 +429,68 @@ func finishWait(r core.WaitResult, asJSON bool) error {
 	return nil
 }
 
+func (a *app) longPoll(label string, deadline time.Time, call func(time.Duration) (core.WaitResult, error)) (core.WaitResult, error) {
+	backoff := backoffMin
+	trouble := ""
+	stop := func() {}
+	start := func() {
+		if label != "" {
+			stop = spinning(label)
+		}
+	}
+	start()
+	defer func() { stop() }()
+	report := func(now string) {
+		if now == trouble {
+			return
+		}
+		stop()
+		if now == "" {
+			fmt.Fprintln(os.Stderr, "back in touch with the dev box")
+		} else {
+			fmt.Fprintln(os.Stderr, now+". Still waiting")
+		}
+		trouble = now
+		start()
+	}
+	for {
+		slice := waitSlice
+		if !deadline.IsZero() {
+			slice = min(slice, time.Until(deadline))
+			if slice <= 0 {
+				return core.WaitResult{}, exitCode{exitTimedOut, "timed out"}
+			}
+		}
+		r, err := call(slice)
+		var network transport.NetworkError
+		if errors.As(err, &network) {
+			if !network.Retryable() {
+				return r, fmt.Errorf("%w. Fix SSH login to %s, then try again", err, a.host)
+			}
+			report(network.Error())
+			stop()
+			time.Sleep(min(backoff, slice))
+			start()
+			backoff = min(backoff*2, backoffMax)
+			continue
+		}
+		if err != nil {
+			return r, err
+		}
+		backoff = backoffMin
+		report(r.Trouble)
+		if r.Done() {
+			return r, nil
+		}
+	}
+}
+
 func (a *app) wait(args []string) error {
 	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
 	timeout := fs.Int("timeout", 0, "")
 	asJSON := fs.Bool("json", false, "")
+	first := fs.Bool("any", false, "")
+	notify := fs.Bool("notify", false, "")
 	names, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
@@ -303,57 +502,55 @@ func (a *app) wait(args []string) error {
 	if *timeout > 0 {
 		deadline = time.Now().Add(time.Duration(*timeout) * time.Second)
 	}
-	backoff := backoffMin
-	trouble := ""
 	label := "Waiting for " + strings.Join(names, ", ")
-	stop := func() {}
-	if !*asJSON {
-		stop = spinning(label)
+	if *asJSON {
+		label = ""
 	}
-	defer func() { stop() }()
-	report := func(now string) {
-		if now != trouble {
-			stop()
-		}
-		switch {
-		case now == trouble:
-		case now == "":
-			fmt.Fprintln(os.Stderr, "back in touch with the dev box")
-		default:
-			fmt.Fprintln(os.Stderr, now+". Still waiting")
-		}
-		trouble = now
+	r, err := a.longPoll(label, deadline, func(slice time.Duration) (core.WaitResult, error) {
+		params := core.WaitParams{Names: names, Timeout: int(math.Ceil(slice.Seconds())), Any: *first}
+		return transport.CallWithin(a.client, slice+waitMargin, core.Wait, params)
+	})
+	if err != nil {
+		return err
 	}
-	for {
-		slice := waitSlice
-		if !deadline.IsZero() {
-			slice = min(slice, time.Until(deadline))
-			if slice <= 0 {
-				return exitCode{exitTimedOut, "timed out"}
-			}
-		}
-		params := core.WaitParams{Names: names, Timeout: int(math.Ceil(slice.Seconds()))}
-		r, err := transport.CallWithin(a.client, slice+waitMargin, core.Wait, params)
-		var network transport.NetworkError
-		if errors.As(err, &network) {
-			if !network.Retryable() {
-				return fmt.Errorf("%w. Fix SSH login to %s, then run gofer wait again", err, a.host)
-			}
-			report(network.Error())
-			time.Sleep(min(backoff, slice))
-			if !*asJSON {
-				stop = spinning(label)
-			}
-			backoff = min(backoff*2, backoffMax)
+	err = finishWait(r, *asJSON)
+	if *notify {
+		raiseAlerts(r, *asJSON)
+	}
+	return err
+}
+
+func alertText(v core.View) (title, body string) {
+	title = "gofer: " + core.OneLine(v.Name)
+	body = stateLabel(v, alertClip)
+	if v.Next != "" {
+		body += ". Run " + core.OneLine(v.Next)
+	}
+	return title, body
+}
+
+func alertCommand(goos, title, body string) (string, []string) {
+	switch goos {
+	case "darwin":
+		script := "on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run"
+		return "osascript", []string{"-e", script, title, body}
+	case "linux":
+		return "notify-send", []string{"--", title, body}
+	}
+	return "", nil
+}
+
+func raiseAlerts(r core.WaitResult, asJSON bool) {
+	for _, v := range r.Views {
+		if !v.Returned() {
 			continue
 		}
-		if err != nil {
-			return err
+		title, body := alertText(v)
+		if !asJSON {
+			terminalAlert(title + ": " + body)
 		}
-		backoff = backoffMin
-		report(r.Trouble)
-		if r.Done() {
-			return finishWait(r, *asJSON)
+		if name, args := alertCommand(runtime.GOOS, title, body); name != "" {
+			proc.Cmd{Name: name, Args: args, Limit: alertLimit}.Run()
 		}
 	}
 }
@@ -522,15 +719,70 @@ func (a *app) stop(args []string) error {
 func (a *app) rm(args []string) error {
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	force := fs.Bool("force", false, "")
+	finished := fs.Bool("finished", false, "")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil {
 		return err
 	}
-	if len(pos) != 1 {
-		return errors.New("usage: gofer rm <name>")
+	switch {
+	case *finished && *force:
+		return errors.New("--finished skips unsaved work, so it can't be combined with --force")
+	case *finished && len(pos) > 0:
+		return errors.New("--finished takes no names")
+	case *finished:
+		return a.rmFinished()
+	case len(pos) == 0:
+		return errors.New("usage: gofer rm <name>...")
 	}
-	name := pos[0]
-	params := core.RemoveParams{Name: name, Force: *force}
+	failed := false
+	for _, name := range pos {
+		err := a.removeAgent(name, *force)
+		var network transport.NetworkError
+		if errors.As(err, &network) {
+			return err
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, errorPrefix(), err)
+			failed = true
+		}
+	}
+	if failed {
+		return exitCode{1, ""}
+	}
+	return nil
+}
+
+func (a *app) rmFinished() error {
+	stop := spinning("Reading " + a.host)
+	views, err := transport.Call(a.client, core.List, core.ListParams{Client: a.cfg.Client, Peek: true})
+	stop()
+	if err != nil {
+		return err
+	}
+	settled := slices.DeleteFunc(views, func(v core.View) bool { return v.Source != "gofer" || !v.Settled })
+	if len(settled) == 0 {
+		fmt.Println("No finished agents on", a.host)
+		return nil
+	}
+	for _, v := range settled {
+		if v.Stuck() {
+			fmt.Printf("Skipped %s: %s, so its work may be unfinished\n", v.Name, stateLabel(v, detailClip))
+			continue
+		}
+		err := a.removeAgent(v.Name, false)
+		var network transport.NetworkError
+		if errors.As(err, &network) {
+			return err
+		}
+		if err != nil {
+			fmt.Println("Skipped:", err)
+		}
+	}
+	return nil
+}
+
+func (a *app) removeAgent(name string, force bool) error {
+	params := core.RemoveParams{Name: name, Force: force}
 	for {
 		stop := spinning("Removing " + name)
 		r, err := transport.Call(a.client, core.Remove, params)

@@ -35,6 +35,7 @@ type Hook struct {
 	SessionID string
 	Socket    string
 	Failure   string
+	Summary   string
 	Message   string
 	Pending   bool
 }
@@ -46,6 +47,7 @@ func ParseHook(r io.Reader) (Hook, error) {
 		Message      string            `json:"message"`
 		Error        string            `json:"error"`
 		ErrorDetails string            `json:"error_details"`
+		LastReply    string            `json:"last_assistant_message"`
 		Tasks        []json.RawMessage `json:"background_tasks"`
 		Crons        []json.RawMessage `json:"session_crons"`
 	}
@@ -56,7 +58,10 @@ func ParseHook(r io.Reader) (Hook, error) {
 		Kind: hookKinds[in.Event], SessionID: in.SessionID, Socket: os.Getenv(socketEnv),
 		Message: in.Message, Pending: len(in.Tasks)+len(in.Crons) > 0,
 	}
-	if in.Event == "StopFailure" {
+	switch in.Event {
+	case "Stop":
+		hook.Summary = Summary(in.LastReply)
+	case "StopFailure":
 		hook.Failure = failure(in.Error, in.ErrorDetails)
 	}
 	return hook, nil
@@ -77,7 +82,9 @@ func HookSettings(command string, bypass bool) ([]byte, error) {
 	handler := []map[string]any{{"type": "command", "command": command, "timeout": 10}}
 	group := []map[string]any{{"hooks": handler}}
 	settings := map[string]any{
-		"permissions": map[string]any{"deny": dialogTools},
+		"permissions":             map[string]any{"deny": dialogTools},
+		"inputNeededNotifEnabled": true,
+		"agentPushNotifEnabled":   true,
 		"hooks": map[string]any{
 			"SessionStart": group,
 			"Stop":         group,

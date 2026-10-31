@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -205,17 +206,23 @@ func spinning(label string) func() {
 		return func() {}
 	}
 	finish := make(chan struct{})
+	interrupted := make(chan os.Signal, 1)
+	signal.Notify(interrupted, os.Interrupt)
 	var wait sync.WaitGroup
 	wait.Add(1)
 	go func() {
 		defer wait.Done()
+		defer signal.Stop(interrupted)
 		select {
 		case <-finish:
 			return
+		case <-interrupted:
+			os.Exit(errCancelled.code)
 		case <-time.After(spinnerDelay):
 		}
 		fmt.Print(hideCursor)
-		defer fmt.Print("\r" + clearLine + showCursor)
+		restore := "\r" + clearLine + showCursor
+		defer fmt.Print(restore)
 		ticker := time.NewTicker(spinnerFrame)
 		defer ticker.Stop()
 		for frame := 0; ; frame++ {
@@ -223,6 +230,9 @@ func spinning(label string) func() {
 			select {
 			case <-finish:
 				return
+			case <-interrupted:
+				fmt.Print(restore)
+				os.Exit(errCancelled.code)
 			case <-ticker.C:
 			}
 		}

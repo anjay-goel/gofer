@@ -11,7 +11,7 @@ Gofer runs Claude Code agents on a dev box. They keep working while the laptop s
 
 Run `gofer ls` at the start of any session that touches dev box work, so you see what finished, what is blocked and what changed. It marks those changes as seen, so use `gofer ls --peek` if you only want a look.
 
-A `*` marks an agent with news. There is no finished state: an agent that finished its turn shows as `idle`, with `turn finished` under CHANGED.
+Rows lead with what needs attention: blocked, failed or cut short, finished with news, working, then the rest. A `*` marks an agent with news. SUMMARY is the first line of its last reply, and stuck agents show the command to run there. `gofer ls --json` adds `summary`, `commits` and `next`. There is no finished state: an agent that finished its turn shows as `idle`.
 
 Gofer is already set up and this page covers its commands, so go straight to `gofer run`. Don't run `gofer doctor` or `--help`, read gofer's config, or SSH in to check things first. `gofer run` checks the repo itself and refuses within seconds, and it changes nothing when it does. Use `gofer doctor` only after an error you can't act on.
 
@@ -60,7 +60,11 @@ gofer wait <name> <name2>
 
 If several apply, the first of 2, 4 and 3 wins.
 
-Never poll with repeated `gofer ls` or `gofer logs` calls, because each one spends tokens.
+With several agents, `gofer wait --any <name> <name2>` returns as soon as one settles and prints only that agent. Its exit code is for that agent. Agents that have already settled count, so drop that name before you wait for the rest.
+
+Add `--notify` when the user wants a desktop alert. It names the agent, its state and the next command.
+
+Never poll with repeated `gofer ls` or `gofer logs` calls, because each one spends tokens. Never use `gofer logs -f`: it's for people watching a terminal, and every entry it prints spends your tokens. Use `gofer wait` instead.
 
 Finished means the agent's turn ended. Read what it printed to see whether it completed the work or stopped to ask a question.
 
@@ -76,7 +80,7 @@ This works for running and stopped agents. It reports whether the message landed
 
 ## Blocked agents
 
-A message can't approve a permission prompt, so `gofer send` refuses while an agent is blocked. Tell the user and give them `gofer attach <name>`.
+A message can't approve a permission prompt, so `gofer send` refuses while an agent is blocked. Tell the user and give them the command `gofer wait` printed, `gofer attach <name>`.
 
 Agents can't open question dialogs or plan mode. They ask in their reply and end their turn, which isn't blocked. `gofer wait` exits 0 for it, so answer with `gofer send`.
 
@@ -88,4 +92,6 @@ Agents can't open question dialogs or plan mode. They ask in their reply and end
 
 ## Finishing
 
-`gofer stop <name>` stops an agent and keeps its conversation, and says so if it was already stopped. `gofer rm <name>` removes it and its worktree, keeps the branch, and refuses if there is uncommitted or unfetched work. Run it from the repo you fetched into, so gofer can see the commits. Only pass `--force` when the user asks for it.
+`gofer stop <name>` stops an agent and keeps its conversation, and says so if it was already stopped. `gofer rm <name>...` removes agents and their worktrees, keeps the branches, reports each one, and refuses a running agent or uncommitted or unfetched work. Run it from the repo you fetched into, so gofer can see the commits. Only pass `--force` when the user asks for it.
+
+`gofer rm --finished` removes every finished agent and says which it skipped: those with uncommitted or unfetched work, and failed or cut-short agents that may still need waking.

@@ -43,6 +43,15 @@ gofer wait auth
   follow  https://claude.ai/code/session_...
 ```
 
+Come back later and one glance tells you what happened. What needs you comes first:
+
+```text
+NAME   STATE    CHANGED   COMMITS    SUMMARY
+docs   blocked  5m ago               Run gofer attach docs
+auth*  idle     2h ago    4 commits  Fixed the refresh race, one test still skipped
+api    running  just now  1 commit
+```
+
 Or ask your local Claude: `gofer init` installs a skill, so "hand this off to gofer" just works.
 
 `gofer init` then offers to open Claude and set up the box. The `/dev-box-setup` skill asks what you need, then handles repos, dev tools, CLIs, MCP servers, Claude settings and app access one at a time. You can run it again at any time.
@@ -62,16 +71,17 @@ gofer run api --doc plan.md --worktree --name auth
 | Command | What it does |
 | --- | --- |
 | `gofer run <dir> "<prompt>"` | Start an agent |
-| `gofer ls` | See agents and live sessions |
-| `gofer logs <name>` | Read the conversation |
+| `gofer ls` | See outcomes, with what needs you first |
+| `gofer logs <name>` | Read the conversation and get the follow link |
 | `gofer wait <name>...` | Block until finished or stuck |
 | `gofer send <name> "<msg>"` | Message or wake an agent |
 | `gofer attach <name>` | Open the full TUI, Ctrl+Z detaches |
 | `gofer cp <file> <name>:` | Copy files to an agent |
 | `gofer cp <name>:<path> <local>` | Copy files back |
 | `gofer stop <name>` | Stop it, keep the conversation |
-| `gofer rm <name>` | Remove it and its worktree, keep the branch |
+| `gofer rm <name>...` | Remove them and their worktrees, keep the branches |
 | `gofer doctor` | Check the setup |
+| `gofer completion bash\|zsh\|fish` | Print a completion script |
 
 <details>
 <summary><b>Options</b></summary>
@@ -88,9 +98,13 @@ gofer run api --doc plan.md --worktree --name auth
 | | `--bypass` | Skip permission checks |
 | `ls` | `--peek` | Leave news marked as unseen |
 | `logs` | `-n <count>` | Entries to show. 30 by default, `0` for all |
-| `wait` | `--timeout <seconds>` | Stop waiting after this long |
+| | `-f` | Follow until it settles or Ctrl+C. Survives dropped connections |
+| `wait` | `--any` | Return the first agent to settle, like `wait -n` |
+| | `--notify` | Raise a desktop alert for each settled agent |
+| | `--timeout <seconds>` | Stop waiting after this long |
 | `attach` | `--rex`, `--ssh` | Choose Rex or SSH. Rex falls back to SSH |
-| `rm` | `--force` | Remove despite uncommitted or unfetched work |
+| `rm` | `--force` | Remove despite running, uncommitted or unfetched work |
+| | `--finished` | Remove every finished agent. Skips unsaved or unfinished work and says which |
 | `doctor` | `--live` | Run a small test agent in a throwaway folder |
 | Any | `--host <host>` | Use another dev box, or set `GOFER_HOST` |
 | `run`, `ls`, `wait` | `--json` | Print JSON |
@@ -114,7 +128,24 @@ gofer run api --doc plan.md --worktree --name auth
 | 4 | An agent failed or was cut short | |
 | 124 | `--timeout` ran out | |
 
-If several apply to `wait`, the first of 2, 4 and 3 wins.
+If several apply to `wait`, the first of 2, 4 and 3 wins. With `--any`, the code is for the agent it printed. Agents that have already settled count, so drop that name before waiting for the rest. `gofer logs -f` exits like `wait`.
+
+</details>
+
+<details>
+<summary><b>Shell completion</b></summary>
+
+<br>
+
+Add one of these to your shell's startup file:
+
+```sh
+eval "$(gofer completion bash)"
+source <(gofer completion zsh)
+gofer completion fish | source
+```
+
+Agent names come from a local list that `gofer ls` refreshes, so Tab never connects to the dev box.
 
 </details>
 
@@ -143,12 +174,15 @@ gofer init devbox --workdir ~/code
 - **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself. Claude never saves trust for the home folder, so run agents in a folder inside it.
 - **Questions:** gofer turns off question dialogs and plan mode for its agents, so they can't hang overnight. They ask in plain text and end their turn, and `gofer send` answers.
 - **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
+- **Desktop alerts:** `--notify` names the agent, its state and the next command. It uses terminal escape codes (OSC 9 and a bell) where stdout is a terminal, plus `osascript` or `notify-send` when they exist, so some terminals show it twice. With none of these, it skips quietly.
+- **Finished agents:** `rm --finished` keeps failed and cut-short agents, because they may still need waking.
 - **Scheduled work:** an agent with a `/loop` or wakeup pending counts as running, so `gofer wait` keeps waiting. Use `--timeout` to stop sooner.
 - **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
-- **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login.
+- **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login. `gofer logs` shows the link while the agent runs.
+- **Phone push:** gofer's agents run with `inputNeededNotifEnabled` and `agentPushNotifEnabled` on, whatever your own `/config` says. Claude accepts both per session, but whether a push reaches a phone is unverified, and it needs the Claude app set up as in Claude's [Remote Control docs](https://code.claude.com/docs/en/remote-control.md).
 - **Starting from the app:** `/dev-box-setup` can add this. It's separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.
 - **Lost connections:** `gofer run` can't start a second agent on retry. If `gofer send` drops, check `gofer logs` before resending.
-- **Untested:** phone push notifications and waking an agent from the phone.
+- **Untested:** phone push delivery and waking an agent from the phone.
 
 ## Development
 

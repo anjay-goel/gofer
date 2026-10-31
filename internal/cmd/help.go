@@ -19,24 +19,28 @@ Options:
 `,
 	"ls": `Usage: gofer ls [options]
 
-See agents and live sessions. * marks news since you last looked.
+See agents and live sessions, with what needs you first. * marks news since
+you last looked.
 
 Options:
   --peek  Leave news marked as unseen
   --json  Print JSON
 `,
-	"logs": `Usage: gofer logs <name> [-n count]
+	"logs": `Usage: gofer logs <name> [-n count] [-f]
 
-Read an agent's conversation.
+Read an agent's conversation, and its follow link while it runs.
 
 Options:
   -n <count>  Entries to show. 30 by default, 0 for all
+  -f          Follow until it settles, then exit like gofer wait
 `,
 	"wait": `Usage: gofer wait <name>... [options]
 
 Block until agents finish or get stuck, then show their work.
 
 Options:
+  --any                Return the first agent to settle, like wait -n
+  --notify             Raise a desktop alert for each settled agent
   --timeout <seconds>  Stop waiting after this long
   --json               Print JSON
 
@@ -46,6 +50,9 @@ Exit codes:
   3    Turn can't be confirmed finished
   4    Failed or cut short
   124  Timed out
+
+With --any, the code is for the agent it printed. Agents that have already
+settled count, so drop that name before waiting for the rest.
 `,
 	"send": `Usage: gofer send <name> "<message>"
 
@@ -68,12 +75,14 @@ Copy files or folders to or from an agent. Remote paths start in its folder.
 
 Stop an agent and keep its conversation.
 `,
-	"rm": `Usage: gofer rm <name> [--force]
+	"rm": `Usage: gofer rm <name>... [--force]
+       gofer rm --finished
 
-Remove an agent and its worktree. The branch stays.
+Remove agents and their worktrees. Branches stay. Running agents are refused.
 
 Options:
-  --force  Remove despite uncommitted or unfetched work
+  --force     Remove despite running or uncommitted or unfetched work
+  --finished  Remove every finished agent, skipping unsaved or unfinished work
 `,
 	"init": `Usage: gofer init [host] [options]
        gofer init --remove [host]
@@ -85,6 +94,16 @@ Options:
   --terminal <name>   How attach opens: ssh or rex
   --yes               Skip the Claude install prompt
   --remove            Undo what gofer installed
+`,
+	"completion": `Usage: gofer completion bash|zsh|fish
+
+Print a completion script. Agent names come from a local list that gofer ls
+refreshes, so Tab never connects to the dev box.
+
+Load it from your shell's startup file:
+  bash  eval "$(gofer completion bash)"
+  zsh   source <(gofer completion zsh)
+  fish  gofer completion fish | source
 `,
 	"doctor": `Usage: gofer doctor [--live]
 

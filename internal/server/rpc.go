@@ -58,6 +58,7 @@ func (s *Server) routes() []route {
 		handle(core.List, s.list),
 		handle(core.Wait, s.wait),
 		handle(core.Logs, s.logs),
+		handle(core.Follow, s.follow),
 		handle(core.Send, s.send),
 		handle(core.Stop, s.stop),
 		handle(core.Remove, s.remove),

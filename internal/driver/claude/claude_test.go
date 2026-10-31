@@ -2,11 +2,13 @@ package claude
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/anjay-goel/gofer/internal/core"
 )
@@ -136,6 +138,8 @@ func TestHookSettingsDenyDialogs(t *testing.T) {
 			Permissions struct {
 				Deny []string `json:"deny"`
 			} `json:"permissions"`
+			InputNeeded bool `json:"inputNeededNotifEnabled"`
+			AgentPush   bool `json:"agentPushNotifEnabled"`
 		}
 		if err := json.Unmarshal(data, &settings); err != nil {
 			t.Fatal(err)
@@ -143,6 +147,77 @@ func TestHookSettingsDenyDialogs(t *testing.T) {
 		if !reflect.DeepEqual(settings.Permissions.Deny, []string{"AskUserQuestion", "EnterPlanMode"}) {
 			t.Fatalf("bypass %v: deny = %v", bypass, settings.Permissions.Deny)
 		}
+		if !settings.InputNeeded || !settings.AgentPush {
+			t.Fatalf("bypass %v: push settings missing: %s", bypass, data)
+		}
+	}
+}
+
+func TestSummaryPicksAUsefulFirstLine(t *testing.T) {
+	long := strings.Repeat("é", summaryLimit)
+	cases := []struct {
+		reply string
+		want  string
+	}{
+		{"Fixed the race\n\nDetails below", "Fixed the race"},
+		{"## Summary\n\n**Done.** One test skipped", "Done. One test skipped"},
+		{"# Only a heading", "Only a heading"},
+		{"\n---\n- bullet first\n", "bullet first"},
+		{"```\ncode\n```", "code"},
+		{"bad\x1b[31m text\x07", "bad[31m text"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := Summary(tc.reply); got != tc.want {
+			t.Errorf("%q: got %q", tc.reply, got)
+		}
+	}
+	if got := Summary(long); len(got) > summaryLimit+len("…") || !utf8.ValidString(got) {
+		t.Fatalf("not capped: %d bytes", len(got))
+	}
+}
+
+func TestTranscriptReadsPickUpWhereTheyStopped(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", "p")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "s.jsonl")
+	row := func(role, text string) string {
+		return fmt.Sprintf(`{"type":%q,"message":{"content":[{"type":"text","text":%q}]}}`, role, text)
+	}
+	first := row("assistant", "one") + "\n"
+	partial := row("assistant", "two")
+	if err := os.WriteFile(path, []byte(first+partial[:20]), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := New(home)
+	lines, cursor, err := d.TranscriptFrom("s", 0)
+	if err != nil || len(lines) != 1 || cursor != int64(len(first)) {
+		t.Fatalf("lines = %+v, cursor = %d, err = %v", lines, cursor, err)
+	}
+	if err := os.WriteFile(path, []byte(first+partial+"\n"+row("user", "more")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lines, next, err := d.TranscriptFrom("s", cursor)
+	if err != nil || len(lines) != 2 || lines[0].Text != "two" {
+		t.Fatalf("lines = %+v, err = %v", lines, err)
+	}
+	if again, _, _ := d.TranscriptFrom("s", cursor); !reflect.DeepEqual(again, lines) {
+		t.Fatalf("a retry saw %+v", again)
+	}
+	if lines, same, _ := d.TranscriptFrom("s", next); len(lines) != 0 || same != next {
+		t.Fatalf("lines = %+v, cursor = %d", lines, same)
+	}
+	if got := d.LastReply("s"); got != "" {
+		t.Fatalf("a reply older than the last input came back: %q", got)
+	}
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 2*replyTail)+"\n"+first), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.LastReply("s"); got != "one" {
+		t.Fatalf("got %q", got)
 	}
 }
 

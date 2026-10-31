@@ -34,6 +34,7 @@ type Agent struct {
 	Effort    string    `json:"effort,omitempty"`
 	Socket    string    `json:"socket,omitempty"`
 	Failure   string    `json:"failure,omitempty"`
+	Summary   string    `json:"summary,omitempty"`
 	Pending   bool      `json:"pending,omitempty"`
 	Scratch   bool      `json:"scratch,omitempty"`
 	Created   time.Time `json:"created"`
@@ -227,7 +228,7 @@ func (s *Store) List() ([]Agent, []Unreadable, error) {
 			agents = append(agents, a)
 		}
 	}
-	sort.Slice(agents, func(i, j int) bool { return agents[i].Created.Before(agents[j].Created) })
+	sort.SliceStable(agents, func(i, j int) bool { return agents[i].Created.Before(agents[j].Created) })
 	return agents, unreadable, nil
 }
 

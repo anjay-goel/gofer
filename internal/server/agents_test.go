@@ -73,6 +73,163 @@ func TestWaitReportsUnfinishedTurns(t *testing.T) {
 	}
 }
 
+func TestWaitAnyReturnsTheFirstToSettle(t *testing.T) {
+	const other = "bbbbbbbb-0000-0000-0000-000000000000"
+	rows := func(a, b string) string {
+		return fmt.Sprintf(`[{"sessionId":"%s",%s},{"sessionId":"%s",%s}]`, sessionID, a, other, b)
+	}
+	busy, idle, waiting := `"status":"busy"`, `"status":"idle"`, `"status":"waiting"`
+	cases := []struct {
+		name        string
+		agents      string
+		stopped     []string
+		wantName    string
+		wantBlocked bool
+		wantFailed  bool
+	}{
+		{name: "nothing settled", agents: rows(busy, busy)},
+		{name: "idle before its turn doesn't count", agents: rows(idle, busy)},
+		{name: "the second settled", agents: rows(busy, idle), stopped: []string{"b"}, wantName: "b"},
+		{name: "the first of two settled", agents: rows(idle, idle), stopped: []string{"a", "b"}, wantName: "a"},
+		{name: "blocked counts, and exits like blocked", agents: rows(busy, waiting), wantName: "b", wantBlocked: true},
+		{name: "a dead agent counts, and exits like failed", agents: fmt.Sprintf(`[{"sessionId":"%s",%s}]`, other, busy), wantName: "a", wantFailed: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, tc.agents)
+			now := time.Now().UTC()
+			f.create(t, store.Agent{Name: "a", SessionID: sessionID, Dir: f.home, LastInput: now})
+			f.create(t, store.Agent{Name: "b", SessionID: other, Dir: f.home, LastInput: now})
+			for _, name := range tc.stopped {
+				f.srv.Hook(name, strings.NewReader(`{"hook_event_name":"Stop"}`))
+			}
+			r, err := f.srv.wait(core.WaitParams{Names: []string{"a", "b"}, Any: true})
+			must(t, err)
+			if r.Done() != (tc.wantName != "") || r.Blocked != tc.wantBlocked || r.Failed != tc.wantFailed {
+				t.Fatalf("result = %+v", r)
+			}
+			if tc.wantName != "" && (len(r.Views) != 1 || r.Views[0].Name != tc.wantName) {
+				t.Fatalf("views = %+v", r.Views)
+			}
+		})
+	}
+}
+
+func TestListLeadsWithWhatNeedsYou(t *testing.T) {
+	sessions := []string{}
+	rows := []string{}
+	add := func(row string) string {
+		id := fmt.Sprintf("%08d-0000-0000-0000-000000000000", len(sessions))
+		sessions = append(sessions, id)
+		rows = append(rows, fmt.Sprintf(`{"sessionId":"%s",%s}`, id, row))
+		return id
+	}
+	done, busy := add(`"status":"idle"`), add(`"status":"busy"`)
+	news, fail := add(`"status":"idle"`), add(`"status":"idle"`)
+	blocked := add(`"status":"waiting"`)
+	f := newFixture(t, "["+strings.Join(rows, ",")+"]")
+	repo := filepath.Join(f.home, "api")
+	base := gitRepo(t, repo)
+	gitIn(t, repo, "branch", "agent/news")
+	gitIn(t, repo, "checkout", "-q", "agent/news")
+	gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", "one")
+	gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", "two")
+	now := time.Now().UTC()
+	for i, a := range []store.Agent{
+		{Name: "done", SessionID: done},
+		{Name: "busy", SessionID: busy, LastInput: now},
+		{Name: "news", SessionID: news, Repo: repo, Branch: "agent/news", Base: base},
+		{Name: "fail", SessionID: fail},
+		{Name: "blocked", SessionID: blocked},
+		{Name: "dead", SessionID: "99999999-0000-0000-0000-000000000000", LastInput: now},
+	} {
+		a.Dir, a.Created = f.home, now.Add(time.Duration(i)*time.Second)
+		f.create(t, a)
+	}
+	f.srv.Hook("news", strings.NewReader(`{"hook_event_name":"Stop","last_assistant_message":"## Summary\n\nFixed the race\nmore"}`))
+	f.srv.Hook("fail", strings.NewReader(`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"API Error"}`))
+	f.srv.Store.Update("done", func(a *store.Agent) { a.LastStop = now })
+	f.write(t, ".claude/projects/p/"+done+".jsonl", `{"type":"assistant","message":{"content":[{"type":"text","text":"From the transcript"}]}}`)
+	for _, name := range []string{"done", "fail", "blocked", "busy", "dead"} {
+		events, _ := f.srv.Store.Events(name)
+		f.srv.Store.MarkSeen(name, "c", len(events))
+	}
+	want := []string{"blocked", "fail", "dead", "news", "busy", "done"}
+	for run := 0; run < 2; run++ {
+		views, err := f.srv.list(core.ListParams{Client: "c", Peek: true})
+		must(t, err)
+		var got []string
+		byName := map[string]core.View{}
+		for _, v := range views {
+			got, byName[v.Name] = append(got, v.Name), v
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("order = %v", got)
+		}
+		n := byName["news"]
+		if n.Summary != "Fixed the race" || n.Commits == nil || *n.Commits != 2 || n.Ago != "just now" {
+			t.Fatalf("news = %+v", n)
+		}
+		if byName["done"].Summary != "From the transcript" || byName["done"].Commits != nil {
+			t.Fatalf("done = %+v", byName["done"])
+		}
+		if s := byName["fail"].Summary; s != "" {
+			t.Fatalf("failed summary = %q", s)
+		}
+		if byName["blocked"].Next != "gofer attach blocked" {
+			t.Fatalf("blocked = %+v", byName["blocked"])
+		}
+	}
+	f.srv.record(target{agent: store.Agent{Name: "news"}}, store.EventMessage, "gofer-0123456789")
+	if a, _ := f.srv.Store.Load("news"); a.Summary != "" {
+		t.Fatalf("a new turn kept the old summary: %q", a.Summary)
+	}
+}
+
+func TestFollowDeliversEachEntryOnce(t *testing.T) {
+	f := newFixture(t, `[{"sessionId":"%s","status":"busy"}]`)
+	f.create(t, store.Agent{Name: "a", SessionID: sessionID, Dir: f.home, LastInput: time.Now().UTC()})
+	transcript := filepath.Join(f.home, ".claude", "projects", "p", sessionID+".jsonl")
+	row := func(text string) string {
+		return fmt.Sprintf(`{"type":"assistant","message":{"content":[{"type":"text","text":%q}]}}`+"\n", text)
+	}
+	must(t, os.WriteFile(transcript, []byte(row("one")+row("two")), 0o644))
+	start, err := f.srv.logs(core.LogsParams{Name: "a", Limit: 1})
+	must(t, err)
+	if len(start.Lines) != 1 || start.Lines[0].Text != "two" {
+		t.Fatalf("logs = %+v", start)
+	}
+	empty, err := f.srv.follow(core.FollowParams{Name: "a", Cursor: start.Cursor, Timeout: 0})
+	must(t, err)
+	if len(empty.Lines) != 0 || empty.Wait.Done() || empty.Cursor != start.Cursor {
+		t.Fatalf("follow = %+v", empty)
+	}
+	file, err := os.OpenFile(transcript, os.O_APPEND|os.O_WRONLY, 0o644)
+	must(t, err)
+	defer file.Close()
+	time.AfterFunc(300*time.Millisecond, func() { file.WriteString(row("three")) })
+	next, err := f.srv.follow(core.FollowParams{Name: "a", Cursor: start.Cursor, Timeout: 5})
+	must(t, err)
+	if len(next.Lines) != 1 || next.Lines[0].Text != "three" || next.Wait.Done() {
+		t.Fatalf("follow = %+v", next)
+	}
+	retry, err := f.srv.follow(core.FollowParams{Name: "a", Cursor: start.Cursor, Timeout: 5})
+	must(t, err)
+	if len(retry.Lines) != 1 || retry.Cursor != next.Cursor {
+		t.Fatalf("retry = %+v", retry)
+	}
+	file.WriteString(row("last words"))
+	f.write(t, "agents.json", `[]`)
+	final, err := f.srv.follow(core.FollowParams{Name: "a", Cursor: next.Cursor, Timeout: 5})
+	must(t, err)
+	if !final.Wait.Done() || !final.Wait.Failed || len(final.Lines) != 1 || final.Lines[0].Text != "last words" {
+		t.Fatalf("final = %+v", final)
+	}
+	if _, err := f.srv.follow(core.FollowParams{Name: "nobody", Timeout: 1}); err == nil {
+		t.Fatal("followed an unknown agent")
+	}
+}
+
 func TestWaitOutlastsAFailedAgentList(t *testing.T) {
 	f := newFixture(t, `not json`)
 	f.create(t, store.Agent{Name: "a", SessionID: sessionID, Dir: f.home})
@@ -412,7 +569,7 @@ func TestLargePromptReachesTheAgentThroughAFile(t *testing.T) {
 	if !strings.Contains(string(brief), "fix it") || !strings.Contains(string(brief), doc) {
 		t.Fatal("the brief is missing the prompt or the document")
 	}
-	_, err = f.srv.remove(core.RemoveParams{Name: "job"})
+	_, err = f.srv.remove(core.RemoveParams{Name: "job", Force: true})
 	must(t, err)
 	if left, _ := filepath.Glob(pattern); len(left) != 0 {
 		t.Fatalf("briefs left behind: %v", left)
@@ -576,11 +733,15 @@ func TestRemove(t *testing.T) {
 		{name: "missing repo refuses before touching the session", agents: `[{"id":"cccccccc","sessionId":"%s","state":"done"}]`, repo: "/nonexistent/repo", wantErr: "--force", wantRecord: true, wantNoCall: "rm "},
 		{name: "missing repo goes with force", agents: `[]`, repo: "/nonexistent/repo", force: true},
 		{name: "force keeps a good record when claude can't answer", agents: `not json`, force: true, wantErr: "unexpected claude agents output", wantRecord: true},
+		{name: "a running agent needs force", agents: `[{"id":"cccccccc","sessionId":"%s","status":"busy"}]`, wantErr: "a is running. Stop it with gofer stop a, or use --force", wantRecord: true, wantNoCall: "rm "},
+		{name: "a blocked agent needs force", agents: `[{"id":"cccccccc","sessionId":"%s","status":"waiting"}]`, wantErr: "a is blocked", wantRecord: true, wantNoCall: "rm "},
+		{name: "an agent about to start its turn needs force", agents: `[{"id":"cccccccc","sessionId":"%s","status":"idle"}]`, wantErr: "a is running", wantRecord: true, wantNoCall: "rm "},
+		{name: "force removes a running agent", agents: `[{"id":"cccccccc","sessionId":"%s","status":"busy"}]`, force: true, wantCall: "rm cccccccc"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t, tc.agents)
-			agent := store.Agent{Name: "a", SessionID: sessionID, Dir: f.home}
+			agent := store.Agent{Name: "a", SessionID: sessionID, Dir: f.home, LastInput: time.Now().UTC()}
 			if tc.repo != "" {
 				agent.Repo, agent.Branch, agent.Dir = tc.repo, "agent/a", filepath.Join(tc.repo, "wt")
 			}

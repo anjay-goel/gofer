@@ -28,6 +28,7 @@ func (s *Server) Hook(name string, in io.Reader) {
 		s.Store.Update(name, func(a *store.Agent) {
 			a.LastStop = now
 			a.Failure = h.Failure
+			a.Summary = h.Summary
 			a.Pending = h.Pending
 		})
 		kind := store.EventFinished

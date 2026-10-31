@@ -3,8 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
-	"unicode/utf8"
+	"syscall"
+	"unicode"
+	"unsafe"
 
 	"github.com/anjay-goel/gofer/internal/core"
 )
@@ -18,6 +21,9 @@ const (
 	dim    = "2"
 
 	columnGap = 2
+	ellipsis  = "…"
+	bell      = "\a"
+	osc       = "\x1b]"
 )
 
 var (
@@ -42,6 +48,12 @@ var (
 		"assistant": {"claude", green},
 		"tool":      {"tool", dim},
 		"gofer":     {"gofer", yellow},
+		"follow":    {"follow", dim},
+	}
+	wideRunes = [][2]rune{
+		{0x1100, 0x115F}, {0x2E80, 0xA4CF}, {0xAC00, 0xD7A3}, {0xF900, 0xFAFF}, {0xFE30, 0xFE6F},
+		{0xFF00, 0xFF60}, {0xFFE0, 0xFFE6}, {0x1F300, 0x1F64F}, {0x1F680, 0x1F6FF}, {0x1F900, 0x1F9FF},
+		{0x20000, 0x3FFFD},
 	}
 )
 
@@ -61,6 +73,59 @@ func isTerminal(f *os.File) bool {
 
 func styleable(f *os.File) bool {
 	return isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+}
+
+func terminalWidth() int {
+	if !isTerminal(os.Stdout) {
+		return 0
+	}
+	var size struct{ rows, cols, x, y uint16 }
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdout.Fd(), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&size)))
+	if errno == 0 && size.cols > 0 {
+		return int(size.cols)
+	}
+	columns, _ := strconv.Atoi(os.Getenv("COLUMNS"))
+	return columns
+}
+
+func runeWidth(r rune) int {
+	if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r) {
+		return 0
+	}
+	for _, span := range wideRunes {
+		if r >= span[0] && r <= span[1] {
+			return 2
+		}
+	}
+	return 1
+}
+
+func displayWidth(text string) int {
+	width := 0
+	for _, r := range text {
+		width += runeWidth(r)
+	}
+	return width
+}
+
+func clipWidth(text string, limit int) string {
+	if displayWidth(text) <= limit {
+		return text
+	}
+	width := 0
+	for i, r := range text {
+		width += runeWidth(r)
+		if width >= limit {
+			return strings.TrimRight(text[:i], " ") + ellipsis
+		}
+	}
+	return text
+}
+
+func terminalAlert(text string) {
+	if isTerminal(os.Stdout) && os.Getenv("TERM") != "dumb" {
+		fmt.Print(osc + "9;" + text + bell + bell)
+	}
 }
 
 func ansi(code, text string) string {
@@ -115,9 +180,9 @@ func checkMark(kind string) string {
 	return checkLooks[kind].String()
 }
 
-func stateCell(v core.View) cell {
+func stateCell(v core.View, limit int) cell {
 	look := stateLooks[v.State]
-	label := stateLabel(v)
+	label := stateLabel(v, limit)
 	if styled {
 		label = look.text + " " + label
 	}
@@ -128,16 +193,19 @@ func table(rows [][]cell) string {
 	widths := map[int]int{}
 	for _, row := range rows {
 		for i, c := range row {
-			widths[i] = max(widths[i], utf8.RuneCountInString(c.text))
+			widths[i] = max(widths[i], displayWidth(c.text))
 		}
 	}
 	var out strings.Builder
 	for _, row := range rows {
-		for i, c := range row {
+		last := len(row) - 1
+		for last > 0 && row[last].text == "" {
+			last--
+		}
+		for i, c := range row[:last+1] {
 			out.WriteString(c.String())
-			if i < len(row)-1 {
-				gap := widths[i] - utf8.RuneCountInString(c.text) + columnGap
-				out.WriteString(strings.Repeat(" ", gap))
+			if i < last {
+				out.WriteString(strings.Repeat(" ", widths[i]-displayWidth(c.text)+columnGap))
 			}
 		}
 		out.WriteByte('\n')
