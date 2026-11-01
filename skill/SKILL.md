@@ -37,7 +37,7 @@ git status
 gofer run <dir> --doc plan.md --worktree --name <short-name>
 ```
 
-An agent only knows what you send it. It can't see this conversation or this laptop. Write a complete prompt: the goal, the relevant paths and branch, how to verify the work, and what to report back.
+An agent only knows what you send it. It can't see this conversation, this laptop, or the user's memory and instructions here. Before you start one, think through what the job needs, and make the prompt or handoff document sufficient on its own: the goal, the current state, the relevant paths and branch, decisions already made, the user's rules that apply, how to verify the work, and what to report back. Leave out what the agent can read from the repo.
 
 Agents run in `auto` mode. Only pass `--bypass` when the user asks for it.
 
@@ -86,7 +86,8 @@ Agents can't open question dialogs or plan mode. They ask in their reply and end
 
 ## Files and code
 
-- Copy files or folders with `gofer cp data.csv <name>:` and `gofer cp <name>:report.pdf .`
+- Don't copy anything that's in git. The agent gets it from the repo.
+- Copy whatever else the job needs with `gofer cp data.csv <name>:`, and bring results back with `gofer cp <name>:report.pdf .`
 - Get code with the `git fetch` command that `gofer run` printed.
 - Don't copy secrets. Keep those in the dev box's own config.
 
