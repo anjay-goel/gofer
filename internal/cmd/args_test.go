@@ -734,3 +734,20 @@ func TestDevNullIsNotATerminal(t *testing.T) {
 		t.Fatal("/dev/null counted as a terminal")
 	}
 }
+
+func TestWorkFooter(t *testing.T) {
+	four := 4
+	cases := []struct {
+		view core.View
+		want string
+	}{
+		{core.View{Name: "a"}, ""},
+		{core.View{Name: "a", ToolCalls: 1}, "1 tool call. gofer logs a has the rest."},
+		{core.View{Name: "a", ToolCalls: 23, Commits: &four}, "4 commits, 23 tool calls. gofer logs a has the rest."},
+	}
+	for _, tc := range cases {
+		if got := workFooter(tc.view); got != tc.want {
+			t.Errorf("%+v: got %q", tc.view, got)
+		}
+	}
+}

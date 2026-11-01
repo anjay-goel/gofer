@@ -13,47 +13,43 @@ import (
 
 const (
 	pollInterval = 4 * time.Second
-	workLimit    = 32000
+	workLimit    = 8000
 	followPoll   = time.Second
 	followChecks = 4
 )
 
-func (s *Server) work(sessionID string) []core.LogLine {
-	entries, err := s.Driver.TranscriptSince(sessionID, tokenTag)
-	lines := slices.DeleteFunc(entries, func(l core.LogLine) bool { return l.Role == "user" })
+func (s *Server) addWork(v *core.View) {
+	entries, err := s.Driver.TranscriptSince(v.ID, tokenTag)
+	replies := slices.DeleteFunc(entries, func(l core.LogLine) bool {
+		if l.Role == "tool" {
+			v.ToolCalls++
+		}
+		return l.Role != "assistant"
+	})
 	if err != nil {
-		lines = append(lines, core.LogLine{Role: "gofer", Text: "couldn't read the whole transcript: " + err.Error()})
+		replies = append(replies, core.LogLine{Role: "gofer", Text: "couldn't read the whole transcript: " + err.Error()})
 	}
-	return trimWork(lines)
+	v.Work = trimWork(replies)
+	if a, err := s.Store.Load(v.Name); err == nil {
+		v.Commits = commitCount(a)
+	}
 }
 
 func trimWork(lines []core.LogLine) []core.LogLine {
-	if len(lines) < 2 {
-		return lines
-	}
-	last := lines[len(lines)-1]
-	earlier := lines[:len(lines)-1]
-	size := len(last.Text)
-	for _, l := range earlier {
+	size := 0
+	for _, l := range lines {
 		size += len(l.Text)
 	}
 	dropped := 0
-	for _, role := range []string{"tool", "assistant"} {
-		earlier = slices.DeleteFunc(earlier, func(l core.LogLine) bool {
-			if size <= workLimit || l.Role != role {
-				return false
-			}
-			size -= len(l.Text)
-			dropped++
-			return true
-		})
+	for len(lines) > dropped+1 && size > workLimit {
+		size -= len(lines[dropped].Text)
+		dropped++
 	}
-	trimmed := append(earlier, last)
-	if dropped > 0 {
-		note := core.LogLine{Role: "gofer", Text: fmt.Sprintf("%d earlier entries left out, see gofer logs", dropped)}
-		return slices.Insert(trimmed, 0, note)
+	if dropped == 0 {
+		return lines
 	}
-	return trimmed
+	note := core.LogLine{Role: "gofer", Text: fmt.Sprintf("%d earlier replies left out", dropped)}
+	return slices.Insert(lines[dropped:], 0, note)
 }
 
 func (s *Server) blockReason(t target, fallback string) string {
@@ -124,7 +120,7 @@ func (s *Server) wait(p core.WaitParams) (core.WaitResult, error) {
 		}
 		if result.Done() {
 			for i := range result.Views {
-				result.Views[i].Work = s.work(result.Views[i].ID)
+				s.addWork(&result.Views[i])
 			}
 			return result, nil
 		}

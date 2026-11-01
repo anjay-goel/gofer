@@ -30,6 +30,7 @@ type View struct {
 	Branch      string    `json:"branch,omitempty"`
 	Link        string    `json:"link,omitempty"`
 	Work        []LogLine `json:"work,omitempty"`
+	ToolCalls   int       `json:"tool_calls,omitempty"`
 	Changed     string    `json:"changed,omitempty"`
 	Ago         string    `json:"ago,omitempty"`
 	Summary     string    `json:"summary,omitempty"`

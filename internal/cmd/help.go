@@ -36,7 +36,7 @@ Options:
 `,
 	"wait": `Usage: gofer wait <name>... [options]
 
-Block until agents finish or get stuck, then show their work.
+Block until agents finish or get stuck, then show their replies.
 
 Options:
   --any                Return the first agent to settle, like wait -n

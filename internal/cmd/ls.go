@@ -60,13 +60,10 @@ func (c column) blank() bool {
 }
 
 func commitWord(count *int) string {
-	switch {
-	case count == nil:
+	if count == nil {
 		return ""
-	case *count == 1:
-		return "1 commit"
 	}
-	return fmt.Sprintf("%d commits", *count)
+	return plural(*count, "commit")
 }
 
 func summaryText(v core.View) string {

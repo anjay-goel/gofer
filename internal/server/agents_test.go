@@ -657,7 +657,6 @@ func TestWaitReturnsWorkSinceTheLastInput(t *testing.T) {
 	quoted := assistant("noted " + tag)
 	want := []core.LogLine{
 		{Role: "assistant", Text: "the real reply"},
-		{Role: "tool", Text: "Bash  ls"},
 		{Role: "assistant", Text: "noted " + tag},
 		{Role: "assistant", Text: "tools are back"},
 	}
@@ -678,29 +677,28 @@ func TestWaitReturnsWorkSinceTheLastInput(t *testing.T) {
 			f.write(t, ".claude/projects/p/"+sessionID+".jsonl", strings.Join(rows, "\n"))
 			r, err := f.srv.wait(core.WaitParams{Names: []string{"a"}, Timeout: 1})
 			must(t, err)
-			if !reflect.DeepEqual(r.Views[0].Work, want) {
-				t.Fatalf("work = %+v", r.Views[0].Work)
+			if !reflect.DeepEqual(r.Views[0].Work, want) || r.Views[0].ToolCalls != 1 {
+				t.Fatalf("view = %+v", r.Views[0])
 			}
 		})
 	}
 }
 
 func TestTrimWork(t *testing.T) {
-	big := strings.Repeat("x", workLimit/2)
-	tool := core.LogLine{Role: "tool", Text: big}
+	big := core.LogLine{Role: "assistant", Text: strings.Repeat("x", workLimit/2)}
 	reply := core.LogLine{Role: "assistant", Text: "the reply"}
-	final := core.LogLine{Role: "assistant", Text: big + big + big}
+	final := core.LogLine{Role: "assistant", Text: strings.Repeat("y", workLimit*2)}
 	note := func(n int) core.LogLine {
-		return core.LogLine{Role: "gofer", Text: fmt.Sprintf("%d earlier entries left out, see gofer logs", n)}
+		return core.LogLine{Role: "gofer", Text: fmt.Sprintf("%d earlier replies left out", n)}
 	}
 	cases := []struct {
 		name string
 		in   []core.LogLine
 		want []core.LogLine
 	}{
-		{"within the limit", []core.LogLine{tool, reply}, []core.LogLine{tool, reply}},
-		{"tools go first, oldest first", []core.LogLine{tool, reply, tool, reply}, []core.LogLine{note(1), reply, tool, reply}},
-		{"the newest entry always stays", []core.LogLine{tool, reply, final}, []core.LogLine{note(2), final}},
+		{"within the limit", []core.LogLine{big, reply}, []core.LogLine{big, reply}},
+		{"oldest go first", []core.LogLine{big, big, big, reply}, []core.LogLine{note(2), big, reply}},
+		{"the newest reply always stays", []core.LogLine{big, final}, []core.LogLine{note(1), final}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -80,7 +80,31 @@ func printWait(r core.WaitResult) {
 		}
 		fmt.Printf("%s: %s\n", paint(bold, v.Name), waitState(v))
 		printLines(v.Work)
+		if footer := workFooter(v); footer != "" {
+			fmt.Println(paint(dim, footer))
+		}
 	}
+}
+
+func workFooter(v core.View) string {
+	var parts []string
+	if word := commitWord(v.Commits); word != "" {
+		parts = append(parts, word)
+	}
+	if v.ToolCalls > 0 {
+		parts = append(parts, plural(v.ToolCalls, "tool call"))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s. gofer logs %s has the rest.", strings.Join(parts, ", "), v.Name)
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func waitState(v core.View) cell {

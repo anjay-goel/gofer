@@ -53,7 +53,7 @@ Run `gofer wait` as a background command and carry on with other work. It uses n
 gofer wait <name> <name2>
 ```
 
-- Exit 0 means every agent finished its turn. It prints the work since your last message, so read all of it, not just the end. `gofer logs <name>` has the rest.
+- Exit 0 means every agent finished its turn. It prints the agent's replies since your last message, so read all of them, not just the end. Tool calls are left out, and `gofer logs <name>` has them.
 - Exit 2 means an agent is blocked.
 - Exit 3 means an agent is idle but its turn can't be confirmed finished, so what it printed may be stale. Check `gofer logs <name>` before relying on it.
 - Exit 4 means an agent failed or was cut short, so its work is unfinished. Read what it printed, then use `gofer send` to wake it or tell the user.
