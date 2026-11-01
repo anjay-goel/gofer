@@ -25,6 +25,7 @@ esac
 command -v curl >/dev/null 2>&1 || fail "curl is needed to install gofer"
 
 file="gofer-$os-$arch"
+start="$PWD"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -48,4 +49,16 @@ case ":$PATH:" in
 *":$dir:"*) ;;
 *) echo "Add $dir to your PATH" ;;
 esac
-echo "Next: gofer init"
+cd "$start"
+
+if ! { : </dev/tty; } 2>/dev/null; then
+	echo "Next: gofer init"
+	exit 0
+fi
+
+printf "Set up a dev box now? [Y/n] " >/dev/tty
+read -r answer </dev/tty || answer=n
+case "$answer" in
+"" | y | Y | yes) "$dir/gofer" init </dev/tty >/dev/tty 2>&1 ;;
+*) echo "Next: gofer init" ;;
+esac
