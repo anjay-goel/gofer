@@ -8,22 +8,27 @@
 <br>
 <br>
 
-**Hand work from your laptop to Claude Code agents on a dev box.**
+**Subagents that run on your dev box.**
 
-They keep working while your laptop sleeps. Follow them from your phone or browser, and attach whenever you want.
+Hand work to an agent from Claude Code, shut your laptop, and check the result later. You can follow it from your phone or open its terminal at any point.
+
+It's plain SSH and the real Claude Code, so there's nothing to host.
 
 <br>
 
-<img src="docs/architecture.svg" alt="The gofer CLI on the laptop reaches gofer rpc on the dev box over SSH, the phone reaches the same agents through Remote Control, and code moves with git." width="820">
+<img src="docs/demo.gif" alt="Claude Code hands a flaky test to a Gofer agent on the dev box, reports the fix later, and brings the branch back." width="820">
 
 </div>
 
 ## How it works
 
-- **No server:** each command runs `gofer rpc` over SSH, then exits.
-- **Your laptop can sleep:** results wait on the dev box until you ask.
-- **Real Claude:** agents are `claude --bg` sessions, never `claude -p` or the Agent SDK.
-- **Small footprint:** hooks are per session. Gofer only records Claude's first-run acceptances: repo trust and `--bypass`.
+<p align="center">
+  <img src="docs/architecture.svg" alt="The gofer CLI on the laptop reaches gofer rpc on the dev box over SSH, the phone reaches the same agents through Remote Control, and code moves with git." width="820">
+</p>
+
+Your local Claude uses Gofer much like a subagent. It starts an agent on the box, waits, and reads what the agent did. You can run the same commands yourself, and `--worktree` sends your current commit to a new branch on the box, even if you haven't pushed it.
+
+Each command runs `gofer rpc` over SSH and exits, so nothing of Gofer's stays running. Agents are ordinary `claude --bg` sessions. They keep going when your laptop sleeps, and the results stay on the box until you ask for them. Hooks are set per session, and the only things Gofer saves to your Claude config are folder trust and `--bypass` acceptance.
 
 ## Quick start
 
@@ -36,7 +41,7 @@ gofer init
 
 `gofer init` sets up the box and installs skills for Claude Code, then offers to run `/dev-box-setup` for your tools, CLIs and MCP servers.
 
-Then just ask Claude:
+Then ask Claude:
 
 ```text
 > Hand this off to gofer and tell me when it's done.
@@ -45,7 +50,7 @@ Then just ask Claude:
 > What are my gofer agents doing?
 ```
 
-Come back later and `gofer ls` shows what happened, with what needs you first:
+Later, `gofer ls` shows what happened, starting with anything that needs you:
 
 ```text
 NAME   STATE    CHANGED   COMMITS    SUMMARY
@@ -87,13 +92,13 @@ Run `gofer <command> --help` for options and exit codes.
 
 ## Good to know
 
-- **Folders:** `<dir>` must already exist on the dev box. `.` means the one named like your current folder.
-- **Trust:** gofer accepts Claude's trust prompt inside your working directory, but not for the home folder itself.
-- **Questions:** agents ask in plain text, so `gofer send` can answer. Permission prompts need `gofer attach`.
-- **`--bypass`:** skips permission checks. The first use sets `skipDangerousModePermissionPrompt` in your Claude settings.
-- **Following:** agents join Remote Control, which needs a claude.ai login, and have push turned on. Phone delivery is untested.
-- **`/loop` agents:** these count as running, so give `gofer wait` a `--timeout`.
-- **App sessions:** set up by `/dev-box-setup`. They show as `remote`, and can be messaged but not attached.
+- `<dir>` has to exist on the dev box already. `.` means the folder with the same name as your current one.
+- Gofer accepts Claude's trust prompt for folders in your working directory, but not for the home folder itself.
+- Agents ask questions in plain text, so `gofer send` can answer them. Permission prompts need `gofer attach`.
+- `--bypass` skips permission checks. The first use sets `skipDangerousModePermissionPrompt` in your Claude settings.
+- Following an agent needs a claude.ai login. Phone push is turned on for agents, but delivery is untested.
+- `gofer wait` keeps waiting on a `/loop` agent, so give it a `--timeout`.
+- Sessions started from the Claude app show as `remote`. You can message them, but not attach. `/dev-box-setup` can set this up.
 
 ## Development
 
