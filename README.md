@@ -170,19 +170,13 @@ gofer init devbox --workdir ~/code
 
 ## Good to know
 
-- **Folders:** `<dir>` is a folder in your working directory, or a full path. It must already exist on the dev box, and `.` means the one named like your current folder.
-- **Trust:** gofer accepts Claude's trust prompt for folders in your working directory. Anywhere else, run `claude` there once and accept it yourself. Claude never saves trust for the home folder, so run agents in a folder inside it.
-- **Questions:** gofer turns off question dialogs and plan mode for its agents, so they can't hang overnight. They ask in plain text and end their turn, and `gofer send` answers.
-- **Blocked agents:** a message can't approve a prompt, so use `gofer attach`.
-- **Desktop alerts:** `--notify` names the agent, its state and the next command. It uses `osascript` or `notify-send` when they work, and otherwise terminal escape codes (OSC 9 and a bell) where stdout is a terminal. With none of these, it skips quietly.
-- **Finished agents:** `rm --finished` keeps failed and cut-short agents, because they may still need waking.
-- **Scheduled work:** an agent with a `/loop` or wakeup pending counts as running, so `gofer wait` keeps waiting. Use `--timeout` to stop sooner.
-- **Bypass:** `--bypass` skips permission checks, so use it only for work you trust. The first use sets `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`, which background sessions require.
-- **Following agents:** gofer turns on Remote Control for its own agents, which needs a claude.ai login. `gofer logs` shows the link while the agent runs.
-- **Phone push:** gofer's agents run with `inputNeededNotifEnabled` and `agentPushNotifEnabled` on, whatever your own `/config` says. Claude accepts both per session, but whether a push reaches a phone is unverified, and it needs the Claude app set up as in Claude's [Remote Control docs](https://code.claude.com/docs/en/remote-control.md).
-- **Starting from the app:** `/dev-box-setup` can add this. It's separate from following agents. Sessions started this way show as `remote` in `gofer ls` and can be messaged, but not attached or removed.
-- **Lost connections:** `gofer run` can't start a second agent on retry. If `gofer send` drops, check `gofer logs` before resending.
-- **Untested:** phone push delivery and waking an agent from the phone.
+- **Folders:** `<dir>` must already exist on the dev box. `.` means the one named like your current folder.
+- **Trust:** gofer accepts Claude's trust prompt inside your working directory, but not for the home folder itself.
+- **Questions:** agents ask in plain text, so `gofer send` can answer. Permission prompts need `gofer attach`.
+- **`--bypass`:** skips permission checks. The first use sets `skipDangerousModePermissionPrompt` in your Claude settings.
+- **Following:** agents join Remote Control, which needs a claude.ai login, and have push turned on. Phone delivery is untested.
+- **`/loop` agents:** these count as running, so give `gofer wait` a `--timeout`.
+- **App sessions:** set up by `/dev-box-setup`. They show as `remote`, and can be messaged but not attached.
 
 ## Development
 
