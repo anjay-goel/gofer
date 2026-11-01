@@ -39,10 +39,10 @@ gofer init
 Then just ask Claude:
 
 ```text
-Hand this off to gofer and tell me when it's done.
-Use gofer to run the full test suite on the dev box.
-Start gofer agents to fix the lint errors in api and web.
-What are my gofer agents doing?
+> Hand this off to gofer and tell me when it's done.
+> Use gofer to run the full test suite on the dev box.
+> Start gofer agents to fix the lint errors in api and web.
+> What are my gofer agents doing?
 ```
 
 Come back later and `gofer ls` shows what happened, with what needs you first:

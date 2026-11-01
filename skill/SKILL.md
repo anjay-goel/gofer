@@ -37,7 +37,7 @@ git status
 gofer run <dir> --doc plan.md --worktree --name <short-name>
 ```
 
-An agent only knows what you send it. It can't see this conversation, this laptop, or the user's memory and instructions here. Before you start one, think through what the job needs, and make the prompt or handoff document sufficient on its own: the goal, the current state, the relevant paths and branch, decisions already made, the user's rules that apply, how to verify the work, and what to report back. Leave out what the agent can read from the repo.
+An agent only knows what you send it. It can't see this conversation, this laptop, or the user's memory and instructions here. Before you start one, think through what the job needs, and make the prompt or handoff document sufficient on its own: the goal, the current state, the relevant paths and branch, what's been discussed and decided so far, the user's rules that apply, how to verify the work, and what to report back. Leave out what the agent can read from the repo.
 
 Agents run in `auto` mode. Only pass `--bypass` when the user asks for it.
 
