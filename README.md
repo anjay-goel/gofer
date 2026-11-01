@@ -62,7 +62,7 @@ gofer run api --doc plan.md --worktree --name auth
 gofer wait auth
 ```
 
-`--worktree` sends your committed HEAD to a new `agent/auth` branch, and `gofer run` prints the `git fetch` command that brings the work back.
+`--worktree` sends your committed HEAD to a new `agent/auth` branch. `gofer diff auth` shows the work, and `gofer fetch auth` brings it back to a local `agent/auth` branch.
 
 ## Commands
 
@@ -76,6 +76,8 @@ gofer wait auth
 | `gofer attach <name>` | Open the full TUI, Ctrl+Z detaches |
 | `gofer cp <file> <name>:` | Copy files to an agent |
 | `gofer cp <name>:<path> <local>` | Copy files back |
+| `gofer diff <name>` | Show what it changed since it started, including uncommitted work |
+| `gofer fetch <name>` | Bring its branch into a local `agent/<name>` branch |
 | `gofer stop <name>` | Stop it, keep the conversation |
 | `gofer rm <name>...` | Remove them and their worktrees, keep the branches |
 | `gofer doctor` | Check the setup |

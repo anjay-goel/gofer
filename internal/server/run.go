@@ -153,6 +153,8 @@ func (s *Server) admit(p core.RunParams) (store.Agent, error) {
 	if worktree {
 		agent.Dir = worktreePath(dir, name)
 		agent.Repo, agent.Branch, agent.Base = dir, core.Branch(name), p.Base
+	} else if !p.Scratch {
+		agent.Base, _ = git(dir, "rev-parse", "--verify", "-q", "HEAD")
 	}
 	if p.Scratch {
 		agent.Dir, agent.Scratch = filepath.Join(s.expand(p.Root), name), true

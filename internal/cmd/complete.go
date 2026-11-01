@@ -178,7 +178,7 @@ func candidates(cfg *config.Config, words []string) []string {
 	switch command {
 	case "wait", "rm":
 		return matching(names(), partial, "")
-	case "logs", "attach", "stop", "send":
+	case "logs", "attach", "stop", "send", "diff", "fetch":
 		if positional == 0 {
 			return matching(names(), partial, "")
 		}

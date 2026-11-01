@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -375,6 +376,9 @@ func TestCompletion(t *testing.T) {
 		{[]string{"logs", "-n", ""}, nil},
 		{[]string{"wait", "auth", "a"}, []string{"auth", "api"}},
 		{[]string{"send", "auth", "fi"}, nil},
+		{[]string{"diff", "--"}, []string{"--help", "--host", "--stat"}},
+		{[]string{"diff", "a"}, []string{"auth", "api"}},
+		{[]string{"fetch", "a"}, []string{"auth", "api"}},
 		{[]string{"cp", "au"}, []string{"auth:"}},
 		{[]string{"cp", ""}, nil},
 		{[]string{"--host", ""}, []string{"box", "user@other:22/x"}},
@@ -462,6 +466,218 @@ esac
 	}
 	if err := a.rm([]string{"--finished", "--force"}); err == nil {
 		t.Fatal("--finished took --force")
+	}
+}
+
+type fakeBox struct {
+	dir string
+	a   *app
+}
+
+func newFakeBox(t *testing.T) fakeBox {
+	t.Helper()
+	dir := t.TempDir()
+	script := `#!/bin/sh
+for last; do :; done
+case "$last" in
+*' rpc'*) cat >/dev/null; cat "$FAKE_DIR/reply" ;;
+*) exec sh -c "$last" ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKE_DIR", dir)
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@t")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@t")
+	return fakeBox{dir, &app{host: "box", cfg: &config.Config{}, client: &transport.Client{Host: "box", Version: "v"}}}
+}
+
+func (b fakeBox) reply(t *testing.T, r core.ResolveResult) {
+	t.Helper()
+	data, err := json.Marshal(core.Response{Result: mustJSON(t, r)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.dir, "reply"), append([]byte(core.RPCPrefix), append(data, '\n')...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func gitAt(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %q: %v: %s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestDiff(t *testing.T) {
+	box := newFakeBox(t)
+	repo := filepath.Join(box.dir, "it's a repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitAt(t, repo, "init", "-q")
+	write(".gitignore", "ignored\n")
+	write("kept.txt", "one\n")
+	gitAt(t, repo, "add", ".")
+	gitAt(t, repo, "commit", "-q", "-m", "start")
+	base := gitAt(t, repo, "rev-parse", "HEAD")
+	write("committed.txt", "two\n")
+	gitAt(t, repo, "add", ".")
+	gitAt(t, repo, "commit", "-q", "-m", "work")
+	write("kept.txt", "changed\n")
+	write("fresh.txt", "x\n")
+	write("ignored", "x\n")
+	box.reply(t, core.ResolveResult{Dir: repo, Base: base})
+	printed := captureStdout(t, func() {
+		if err := box.a.diff([]string{"auth"}); err != nil {
+			t.Error(err)
+		}
+	})
+	for _, want := range []string{"+two", "+changed", "Untracked:\n  fresh.txt\n"} {
+		if !strings.Contains(printed, want) {
+			t.Errorf("missing %q in:\n%s", want, printed)
+		}
+	}
+	if strings.Contains(printed, "\x1b") || strings.Contains(printed, "  ignored") {
+		t.Errorf("colour or ignored files in:\n%s", printed)
+	}
+	stat := captureStdout(t, func() {
+		if err := box.a.diff([]string{"auth", "--stat"}); err != nil {
+			t.Error(err)
+		}
+	})
+	if !strings.Contains(stat, "2 files changed") || !strings.Contains(stat, "fresh.txt") {
+		t.Errorf("stat:\n%s", stat)
+	}
+	paged := filepath.Join(box.dir, "paged")
+	t.Setenv("PAGER", "cat > "+transport.Quote(paged))
+	if err := box.a.page(diffScript(repo, base, false, true)); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(paged); !strings.Contains(string(data), "\x1b[") || !strings.Contains(string(data), "fresh.txt") {
+		t.Errorf("paged:\n%s", data)
+	}
+	t.Setenv("PAGER", "true")
+	if err := box.a.page(diffScript(repo, base, false, true)); err != nil {
+		t.Errorf("quitting the pager early: %v", err)
+	}
+	if err := box.a.client.Stream(diffScript("/nonexistent", base, false, false), io.Discard); err == nil {
+		t.Error("a failed diff reported nothing")
+	}
+	box.reply(t, core.ResolveResult{Dir: "/w", GitError: "/w isn't a git repo"})
+	if err := box.a.diff([]string{"auth"}); err == nil || err.Error() != "/w isn't a git repo" {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestFetch(t *testing.T) {
+	box := newFakeBox(t)
+	remote := filepath.Join(box.dir, "box")
+	gitAt(t, box.dir, "init", "-q", "-b", "main", remote)
+	gitAt(t, remote, "commit", "-q", "--allow-empty", "-m", "start")
+	gitAt(t, remote, "switch", "-q", "-c", "agent/auth")
+	local := filepath.Join(box.dir, "laptop")
+	gitAt(t, box.dir, "clone", "-q", remote, local)
+	gitAt(t, local, "switch", "-q", "main")
+	gitAt(t, local, "remote", "remove", "origin")
+	gitAt(t, local, "branch", "-q", "-D", "agent/auth")
+	commit := func(dir string) string {
+		t.Helper()
+		gitAt(t, dir, "commit", "-q", "--allow-empty", "-m", "work in "+dir)
+		return gitAt(t, dir, "rev-parse", "HEAD")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(box.dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(cwd) })
+	if err := box.a.fetch([]string{"auth"}); err == nil || !strings.Contains(err.Error(), "git repo") {
+		t.Fatalf("outside a repo: %v", err)
+	}
+	if err := os.Chdir(local); err != nil {
+		t.Fatal(err)
+	}
+	box.reply(t, core.ResolveResult{Dir: remote, Name: "auth", Branch: "agent/auth", Dirty: true})
+	fetch := func() (string, error) {
+		var err error
+		printed := captureStdout(t, func() { err = box.a.fetch([]string{"auth"}) })
+		return printed, err
+	}
+	wantPrinted := func(want ...string) {
+		t.Helper()
+		printed, err := fetch()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, text := range want {
+			if !strings.Contains(printed, text) {
+				t.Errorf("missing %q in:\n%s", text, printed)
+			}
+		}
+	}
+	wantPrinted("agent/auth is up to date at", "uncommitted work")
+	first := commit(remote)
+	wantPrinted("agent/auth at "+first[:6]+", 1 commit\n", "uncommitted work")
+	if !reachable(first) {
+		t.Error("a fetched commit isn't reachable")
+	}
+	wantPrinted("agent/auth is up to date at " + first[:6])
+	gitAt(t, local, "switch", "-q", "agent/auth")
+	commit(remote)
+	head := commit(remote)
+	wantPrinted("agent/auth at " + head[:6] + ", 2 commits")
+	if got := gitAt(t, local, "rev-parse", "HEAD"); got != head {
+		t.Fatalf("checked out branch at %s, want %s", got, head)
+	}
+	gitAt(t, local, "switch", "-q", "main")
+	mine := commit(gitAt(t, local, "rev-parse", "--show-toplevel"))
+	gitAt(t, local, "update-ref", "refs/heads/agent/auth", mine)
+	theirs := commit(remote)
+	if _, err := fetch(); err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatalf("diverged: %v", err)
+	}
+	if got := gitAt(t, local, "rev-parse", "agent/auth"); got != mine {
+		t.Fatalf("diverged branch moved to %s", got)
+	}
+	if reachable(theirs) {
+		t.Error("a commit only in FETCH_HEAD counts as fetched")
+	}
+	gitAt(t, remote, "switch", "-q", "--orphan", "other")
+	commit(remote)
+	box.reply(t, core.ResolveResult{Dir: remote, Name: "auth", Branch: "other"})
+	if _, err := fetch(); err == nil || !strings.Contains(err.Error(), "no history") {
+		t.Fatalf("unrelated: %v", err)
+	}
+	box.reply(t, core.ResolveResult{Dir: remote, Name: "auth"})
+	if _, err := fetch(); err == nil || !strings.Contains(err.Error(), "isn't on a branch") {
+		t.Fatalf("detached: %v", err)
 	}
 }
 

@@ -43,7 +43,7 @@ const (
 	Send      Method[SendParams, SendResult]       = "send"
 	Stop      Method[NameParams, StopResult]       = "stop"
 	Remove    Method[RemoveParams, RemoveResult]   = "rm"
-	Resolve   Method[NameParams, ResolveResult]    = "resolve"
+	Resolve   Method[ResolveParams, ResolveResult] = "resolve"
 	Doctor    Method[DoctorParams, []Check]        = "doctor"
 	Linger    Method[struct{}, NoteResult]         = "linger"
 	Uninstall Method[struct{}, UninstallResult]    = "uninstall"
@@ -149,10 +149,20 @@ type RemoveResult struct {
 	Note      string `json:"note,omitempty"`
 }
 
+type ResolveParams struct {
+	Name string `json:"name"`
+	Git  bool   `json:"git,omitempty"`
+}
+
 type ResolveResult struct {
-	Job  string `json:"job"`
-	Dir  string `json:"dir"`
-	Note string `json:"note,omitempty"`
+	Job      string `json:"job"`
+	Dir      string `json:"dir"`
+	Note     string `json:"note,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Base     string `json:"base,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	Dirty    bool   `json:"dirty,omitempty"`
+	GitError string `json:"git_error,omitempty"`
 }
 
 type Check struct {

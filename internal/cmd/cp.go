@@ -27,7 +27,7 @@ func splitRemote(arg string) (name, path string, ok bool) {
 }
 
 func (a *app) remotePath(name, file string) (string, error) {
-	r, err := transport.Call(a.client, core.Resolve, core.NameParams{Name: name})
+	r, err := transport.Call(a.client, core.Resolve, core.ResolveParams{Name: name})
 	if err != nil {
 		return "", err
 	}

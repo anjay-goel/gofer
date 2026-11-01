@@ -29,6 +29,8 @@ Interact and manage:
   gofer attach <name> [--rex] [--ssh]
   gofer cp <local> <name>:[path]
   gofer cp <name>:<path> <local>
+  gofer diff <name> [--stat]
+  gofer fetch <name>
   gofer stop <name>
   gofer rm <name>... [--force]
   gofer rm --finished
@@ -118,6 +120,10 @@ func Main(version string, args []string) int {
 		err = a.withClient(a.attach, rest)
 	case "cp":
 		err = a.withClient(a.cp, rest)
+	case "diff":
+		err = a.withClient(a.diff, rest)
+	case "fetch":
+		err = a.withClient(a.fetch, rest)
 	case "stop":
 		err = a.withClient(a.stop, rest)
 	case "rm":

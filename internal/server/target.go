@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -225,7 +226,7 @@ func (s *Server) locateLocked(name string) (target, func(), error) {
 	return t, unlock, nil
 }
 
-func (s *Server) resolve(p core.NameParams) (core.ResolveResult, error) {
+func (s *Server) resolve(p core.ResolveParams) (core.ResolveResult, error) {
 	t, err := s.locate(p.Name)
 	if err != nil {
 		return core.ResolveResult{}, err
@@ -245,5 +246,38 @@ func (s *Server) resolve(p core.NameParams) (core.ResolveResult, error) {
 			r.Dir = t.sess.Cwd
 		}
 	}
+	if p.Git {
+		r.Name = cmp.Or(t.agent.Name, p.Name)
+		r.GitError = t.readGit(&r)
+	}
 	return r, nil
+}
+
+func (t target) readGit(r *core.ResolveResult) string {
+	if _, err := os.Stat(r.Dir); err != nil {
+		return r.Dir + " is gone"
+	}
+	top, err := git(r.Dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return r.Dir + " isn't a git repo"
+	}
+	r.Dir = top
+	if r.Base, err = git(top, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
+		return top + " has no commits yet"
+	}
+	if t.agent.Base != "" {
+		if base, err := git(top, "rev-parse", "--verify", "-q", t.agent.Base+"^{commit}"); err == nil {
+			r.Base = base
+		}
+	}
+	r.Branch = t.agent.Branch
+	if r.Branch == "" {
+		r.Branch, _ = git(top, "symbolic-ref", "--short", "-q", "HEAD")
+	}
+	status, err := git(top, "status", "--porcelain")
+	if err != nil {
+		return fmt.Sprintf("couldn't check %s: %v", top, err)
+	}
+	r.Dirty = status != ""
+	return ""
 }

@@ -81,10 +81,8 @@ func (a *app) run(args []string) error {
 	if strings.TrimSpace(prompt) == "" && params.Doc == "" {
 		return errors.New("give the agent a prompt or a --doc")
 	}
-	var remote string
 	if *worktree {
-		remote, err = a.handoff(&params, *allowDirty)
-		if err != nil {
+		if err := a.handoff(&params, *allowDirty); err != nil {
 			return err
 		}
 	}
@@ -102,8 +100,8 @@ func (a *app) run(args []string) error {
 	if view.Link != "" {
 		fmt.Printf("  %s  %s\n", paint(dim, "follow"), view.Link)
 	}
-	if remote != "" {
-		fmt.Printf("  %s   git fetch %s %s\n", paint(dim, "fetch"), remote, view.Branch)
+	if view.Branch != "" {
+		fmt.Printf("  %s   gofer fetch %s\n", paint(dim, "fetch"), view.Name)
 	}
 	return nil
 }
@@ -125,29 +123,28 @@ func (a *app) start(params core.RunParams) (core.View, error) {
 	}
 }
 
-func (a *app) handoff(p *core.RunParams, allowDirty bool) (string, error) {
+func (a *app) handoff(p *core.RunParams, allowDirty bool) error {
 	if _, err := localGit("rev-parse", "--show-toplevel"); err != nil {
-		return "", errors.New("--worktree needs a git repo in the current folder")
+		return errors.New("--worktree needs a git repo in the current folder")
 	}
 	status, err := localGit("status", "--porcelain")
 	if err != nil {
-		return "", err
+		return err
 	}
 	if status != "" && !allowDirty {
-		return "", errors.New("you have uncommitted changes, and only commits reach the dev box. Commit them, or pass --allow-dirty")
+		return errors.New("you have uncommitted changes, and only commits reach the dev box. Commit them, or pass --allow-dirty")
 	}
 	head, err := localGit("rev-parse", "HEAD")
 	if err != nil {
-		return "", err
+		return err
 	}
 	prep, err := transport.Call(a.client, core.Prepare, core.PrepareParams{Name: p.Name, Repo: p.Repo, Root: p.Root})
 	if err != nil {
-		return "", err
+		return err
 	}
-	remote := a.client.Location(prep.Dir)
-	if _, err := localGit("push", remote, head+":"+core.HandoffRef(p.RequestID)); err != nil {
-		return "", fmt.Errorf("couldn't push to the dev box: %w", err)
+	if _, err := localGit("push", a.client.Location(prep.Dir), head+":"+core.HandoffRef(p.RequestID)); err != nil {
+		return fmt.Errorf("couldn't push to the dev box: %w", err)
 	}
 	p.Repo, p.Base = prep.Dir, head
-	return remote, nil
+	return nil
 }

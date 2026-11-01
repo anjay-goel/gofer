@@ -22,7 +22,7 @@ func (a *app) attach(args []string) error {
 	if len(pos) != 1 {
 		return errors.New("usage: gofer attach <name>")
 	}
-	r, err := transport.Call(a.client, core.Resolve, core.NameParams{Name: pos[0]})
+	r, err := transport.Call(a.client, core.Resolve, core.ResolveParams{Name: pos[0]})
 	if err != nil {
 		return err
 	}

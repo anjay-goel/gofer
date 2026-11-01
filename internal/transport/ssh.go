@@ -77,12 +77,12 @@ func (c *Client) Location(path string) string {
 	return user + host + ":" + path
 }
 
-func quote(text string) string {
+func Quote(text string) string {
 	return "'" + strings.ReplaceAll(text, "'", `'"'"'`) + "'"
 }
 
 func Remote(script string) string {
-	return "sh -c " + quote(script)
+	return "sh -c " + Quote(script)
 }
 
 func (c *Client) args(extra ...string) []string {
@@ -130,6 +130,25 @@ func (c *Client) Interactive(script string) error {
 
 func (c *Client) LineMode(script string) error {
 	return c.attached(script)
+}
+
+func (c *Client) Stream(script string, out io.Writer) error {
+	var errOut bytes.Buffer
+	cmd := exec.Command("ssh", c.args(Remote(script))...)
+	cmd.Stdout = out
+	cmd.Stderr = &errOut
+	err := cmd.Run()
+	text := strings.TrimSpace(errOut.String())
+	var exit *exec.ExitError
+	switch {
+	case !errors.As(err, &exit):
+		return err
+	case text == "":
+		return nil
+	case exit.ExitCode() == 255:
+		return NetworkError{Detail: strings.TrimRight(text, ".")}
+	}
+	return errors.New(text)
 }
 
 func (c *Client) Copy(source, dest string) error {
@@ -240,7 +259,7 @@ func installScript(version string, size int) string {
 		`cat > "$t"`,
 		fmt.Sprintf(`if [ "$(wc -c < "$t")" -ne %d ]; then echo "the upload was cut short" >&2; exit 1; fi`, size),
 		`chmod 755 "$t"`,
-		`if [ "$("$t" version)" != ` + quote("gofer "+version) + ` ]; then echo "the new binary didn't run" >&2; exit 1; fi`,
+		`if [ "$("$t" version)" != ` + Quote("gofer "+version) + ` ]; then echo "the new binary didn't run" >&2; exit 1; fi`,
 		`mv -f "$t" "$d/gofer"`,
 	}, "; ")
 }

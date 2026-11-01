@@ -71,6 +71,19 @@ Options:
 
 Copy files or folders to or from an agent. Remote paths start in its folder.
 `,
+	"diff": `Usage: gofer diff <name> [--stat]
+
+Show what an agent changed since it started, including uncommitted work.
+Untracked files are listed by name after the diff.
+
+Options:
+  --stat  Show a summary of changed files
+`,
+	"fetch": `Usage: gofer fetch <name>
+
+Bring an agent's branch into a local agent/<name> branch. Run it in your repo.
+It only moves the branch forward, and uncommitted work on the dev box stays there.
+`,
 	"stop": `Usage: gofer stop <name>
 
 Stop an agent and keep its conversation.

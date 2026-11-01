@@ -95,6 +95,11 @@ func (a *app) rmFinished() error {
 	return nil
 }
 
+func reachable(commit string) bool {
+	out, err := localGit("for-each-ref", "--count=1", "--contains", commit)
+	return err == nil && out != ""
+}
+
 func (a *app) removeAgent(name string, force bool) error {
 	params := core.RemoveParams{Name: name, Force: force}
 	for {
@@ -109,8 +114,8 @@ func (a *app) removeAgent(name string, force bool) error {
 			}
 			return nil
 		}
-		if _, err := localGit("cat-file", "-e", r.Unfetched+"^{commit}"); err != nil {
-			return fmt.Errorf("%s has commits you haven't fetched. Fetch branch %s here, or use --force. The branch is kept either way", name, core.Branch(name))
+		if !reachable(r.Unfetched) {
+			return fmt.Errorf("%s has commits you haven't fetched. Run gofer fetch %s here, or use --force. The branch is kept either way", name, name)
 		}
 		params.FetchedHead = r.Unfetched
 	}

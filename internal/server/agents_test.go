@@ -898,12 +898,67 @@ func TestResolve(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t, tc.agents)
 			f.create(t, store.Agent{Name: "a", SessionID: tc.session, Dir: f.home})
-			r, err := f.srv.resolve(core.NameParams{Name: "a"})
+			r, err := f.srv.resolve(core.ResolveParams{Name: "a"})
 			checkErr(t, err, tc.wantErr)
 			if r.Job != tc.wantJob {
 				t.Fatalf("result = %+v", r)
 			}
 		})
+	}
+}
+
+func TestResolveGit(t *testing.T) {
+	f := newFixture(t, `[]`)
+	repo := filepath.Join(f.home, "api")
+	base := gitRepo(t, repo)
+	repo, err := filepath.EvalSymlinks(repo)
+	must(t, err)
+	must(t, os.Mkdir(filepath.Join(repo, "sub"), 0o755))
+	gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", "next")
+	head := gitIn(t, repo, "rev-parse", "HEAD")
+	branch := gitIn(t, repo, "symbolic-ref", "--short", "HEAD")
+	plain := t.TempDir()
+	cases := []struct {
+		name  string
+		agent store.Agent
+		want  core.ResolveResult
+	}{
+		{"recorded start, from a subfolder", store.Agent{Dir: filepath.Join(repo, "sub"), Base: base}, core.ResolveResult{Dir: repo, Base: base, Branch: branch}},
+		{"no recorded start", store.Agent{Dir: repo}, core.ResolveResult{Dir: repo, Base: head, Branch: branch}},
+		{"a start the repo has lost", store.Agent{Dir: repo, Base: strings.Repeat("0", 39) + "1"}, core.ResolveResult{Dir: repo, Base: head, Branch: branch}},
+		{"gofer branch", store.Agent{Dir: repo, Base: base, Branch: "agent/a"}, core.ResolveResult{Dir: repo, Base: base, Branch: "agent/a"}},
+		{"not a repo", store.Agent{Dir: plain}, core.ResolveResult{Dir: plain, GitError: plain + " isn't a git repo"}},
+		{"gone", store.Agent{Dir: "/nonexistent/a"}, core.ResolveResult{Dir: "/nonexistent/a", GitError: "/nonexistent/a is gone"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.agent.Name, tc.agent.SessionID = "a", sessionID
+			must(t, f.srv.Store.Delete("a"))
+			f.create(t, tc.agent)
+			tc.want.Name = "a"
+			r, err := f.srv.resolve(core.ResolveParams{Name: "a", Git: true})
+			must(t, err)
+			r.Note = ""
+			if r != tc.want {
+				t.Fatalf("result = %+v, want %+v", r, tc.want)
+			}
+		})
+	}
+	must(t, os.WriteFile(filepath.Join(repo, "new.txt"), []byte("x"), 0o644))
+	r, err := f.srv.resolve(core.ResolveParams{Name: "a", Git: false})
+	must(t, err)
+	if r.Base != "" || r.Dirty {
+		t.Fatalf("plain resolve read git: %+v", r)
+	}
+	a := store.Agent{Name: "b", SessionID: sessionID[:7] + "x" + sessionID[8:], Dir: repo}
+	f.create(t, a)
+	if r, err = f.srv.resolve(core.ResolveParams{Name: "b", Git: true}); err != nil || !r.Dirty {
+		t.Fatalf("result = %+v, %v", r, err)
+	}
+	admitted, err := f.srv.admit(core.RunParams{Name: "c", Repo: repo})
+	must(t, err)
+	if admitted.Base != head || admitted.Branch != "" {
+		t.Fatalf("admitted = %+v, want the start at %s", admitted, head)
 	}
 }
 
