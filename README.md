@@ -27,10 +27,10 @@ They keep working while your laptop sleeps. Follow them from your phone or brows
 
 ## Quick start
 
-You need Go 1.22+ and SSH key login to your dev box. The laptop can be macOS or Linux, and the dev box Linux. Tested with Claude Code 2.1.316.
+You need SSH key login to your dev box. The laptop can be macOS or Linux, and the dev box Linux. Tested with Claude Code 2.1.316.
 
 ```sh
-make install
+curl -fsSL https://raw.githubusercontent.com/anjay-goel/gofer/main/install.sh | sh
 gofer init
 ```
 
@@ -97,9 +97,11 @@ Run `gofer <command> --help` for options and exit codes.
 
 ## Development
 
+Building needs a current Go release.
+
 ```sh
 make test
-make build
+make install
 ```
 
 See [AGENTS.md](AGENTS.md) for project rules. Only `internal/driver/claude` knows Claude Code's formats.

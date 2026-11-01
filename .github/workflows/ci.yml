@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: GOOS=linux go vet ./...
