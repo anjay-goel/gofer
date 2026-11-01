@@ -32,18 +32,20 @@ You need Go 1.22+ and SSH key login to your dev box. The laptop can be macOS or 
 ```sh
 make install
 gofer init
-
-gofer run api "fix the flaky auth test" --name auth
-gofer wait auth
 ```
+
+`gofer init` sets up the box and installs skills for Claude Code, then offers to run `/dev-box-setup` for your tools, CLIs and MCP servers.
+
+Then just ask Claude:
 
 ```text
-✓ Started auth on devbox
-  folder  /home/you/code/api
-  follow  https://claude.ai/code/session_...
+Hand this off to gofer and tell me when it's done.
+Use gofer to run the full test suite on the dev box.
+Start gofer agents to fix the lint errors in api and web.
+What are my gofer agents doing?
 ```
 
-Come back later and one glance tells you what happened. What needs you comes first:
+Come back later and `gofer ls` shows what happened, with what needs you first:
 
 ```text
 NAME   STATE    CHANGED   COMMITS    SUMMARY
@@ -52,19 +54,15 @@ auth*  idle     2h ago    4 commits  Fixed the refresh race, one test still skip
 api    running  just now  1 commit
 ```
 
-Or ask your local Claude: `gofer init` installs a skill, so "hand this off to gofer" just works.
-
-`gofer init` then offers to open Claude and set up the box. The `/dev-box-setup` skill asks what you need, then handles repos, dev tools, CLIs, MCP servers, Claude settings and app access one at a time. You can run it again at any time.
-
-### Hand off your current work
-
-Commit, then run this. The agent starts on a new `agent/auth` branch from your exact HEAD.
+### By hand
 
 ```sh
+gofer run api "fix the flaky auth test" --name auth
 gofer run api --doc plan.md --worktree --name auth
+gofer wait auth
 ```
 
-`gofer run` prints the `git fetch` command that brings the work back.
+`--worktree` sends your committed HEAD to a new `agent/auth` branch, and `gofer run` prints the `git fetch` command that brings the work back.
 
 ## Commands
 
@@ -83,90 +81,7 @@ gofer run api --doc plan.md --worktree --name auth
 | `gofer doctor` | Check the setup |
 | `gofer completion bash\|zsh\|fish` | Print a completion script |
 
-<details>
-<summary><b>Options</b></summary>
-
-<br>
-
-| Command | Option | Effect |
-| --- | --- | --- |
-| `run` | `--name <name>` | Name the agent |
-| | `--doc <file>` | Send a UTF-8 handoff document |
-| | `--worktree` | Hand off your HEAD on a new branch |
-| | `--allow-dirty` | Hand off despite uncommitted changes |
-| | `--model`, `--effort` | Pass through to Claude. Effort is `low`, `medium`, `high`, `xhigh` or `max` |
-| | `--bypass` | Skip permission checks |
-| `ls` | `--peek` | Leave news marked as unseen |
-| `logs` | `-n <count>` | Entries to show. 30 by default, `0` for all |
-| | `-f` | Follow until it settles or Ctrl+C. Survives dropped connections |
-| `wait` | `--any` | Return the first agent to settle, like `wait -n` |
-| | `--notify` | Raise a desktop alert for each settled agent |
-| | `--timeout <seconds>` | Stop waiting after this long |
-| `attach` | `--rex`, `--ssh` | Choose Rex or SSH. Rex falls back to SSH |
-| `rm` | `--force` | Remove despite running, uncommitted or unfetched work |
-| | `--finished` | Remove every finished agent. Skips unsaved or unfinished work and says which |
-| `doctor` | `--live` | Run a small test agent in a throwaway folder |
-| Any | `--host <host>` | Use another dev box, or set `GOFER_HOST` |
-| `run`, `ls`, `wait` | `--json` | Print JSON |
-
-- Put `--` before prompt text that starts with a dash.
-- With `gofer send`, put `--host` before the message.
-
-</details>
-
-<details>
-<summary><b>Exit codes</b></summary>
-
-<br>
-
-| Code | `gofer wait` | `gofer send` |
-| --- | --- | --- |
-| 0 | Every agent finished its turn | Delivered |
-| 1 | Error | Error |
-| 2 | An agent is blocked | |
-| 3 | An idle agent's turn can't be confirmed finished | Delivery can't be confirmed |
-| 4 | An agent failed or was cut short | |
-| 124 | `--timeout` ran out | |
-
-If several apply to `wait`, the first of 2, 4 and 3 wins. With `--any`, the code is for the agent it printed. Agents that have already settled count, so drop that name before waiting for the rest. `gofer logs -f` exits like `wait`.
-
-</details>
-
-<details>
-<summary><b>Shell completion</b></summary>
-
-<br>
-
-Add one of these to your shell's startup file:
-
-```sh
-eval "$(gofer completion bash)"
-source <(gofer completion zsh)
-gofer completion fish | source
-```
-
-Agent names come from a local list that `gofer ls` refreshes, so Tab never connects to the dev box.
-
-</details>
-
-<details>
-<summary><b>Setup options</b></summary>
-
-<br>
-
-```sh
-gofer init devbox --workdir ~/code
-```
-
-| Option | Effect |
-| --- | --- |
-| `--workdir <dir>` | Folder on the dev box where agents work |
-| `--terminal ssh\|rex` | How `gofer attach` opens |
-| `--yes` | Skip the install prompt |
-
-`gofer init --remove [host]` undoes what gofer installed. Agent state stays on the dev box.
-
-</details>
+Run `gofer <command> --help` for options and exit codes.
 
 ## Good to know
 
